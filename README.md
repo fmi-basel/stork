@@ -1,2 +1,2 @@
-# gzenke-stork
-Spiking neural network simulator
+# stork
+Spiking neural network simulator based on PyTorch
