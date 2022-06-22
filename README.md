@@ -8,7 +8,10 @@ Copyright 2019-2022 Julian Rossbroich, Julia Gygax and Friedemann Zenke
 
 If you find this library useful and use it for your research projects, please cite
 
-Rossbroich, J., Gygax, J. & Zenke, F. Fluctuation-driven initialization for spiking neural network training
+> Rossbroich, J., Gygax, J., and Zenke, F. (2022). 
+> Fluctuation-driven initialization for spiking neural network training. 
+> https://doi.org/10.48550/arXiv.2206.10226.
+
 
 
 # Setup
