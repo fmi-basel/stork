@@ -2,7 +2,7 @@
 
 Stork is a library for training spiking neural networks (SNNs) with backpropagation through time (BPTT) using Pytorch.
 
-Copyright 2019-2021 Julian Rossbroich, Julia Gygax and Friedemann Zenke
+Copyright 2019-2022 Julian Rossbroich, Julia Gygax and Friedemann Zenke
 
 ## Citing Stork
 
