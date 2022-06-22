@@ -2,7 +2,6 @@
 
 Stork is a library for training spiking neural networks (SNNs) with backpropagation through time (BPTT) using Pytorch.
 
-Copyright 2019-2022 Julian Rossbroich, Julia Gygax and Friedemann Zenke
 
 ## Citing Stork
 
@@ -13,24 +12,25 @@ If you find this library useful and use it for your research projects, please ci
 > https://doi.org/10.48550/arXiv.2206.10226.
 
 
+**Bibtex Citation:**
+> @misc{rossbroich_fluctdriven_2022,
+    doi = {10.48550/ARXIV.2206.10226},
+    url = {https://arxiv.org/abs/2206.10226},
+    author = {Rossbroich, Julian and Gygax, Julia and Zenke, Friedemann},
+    title = {Fluctuation-driven initialization for spiking neural network training},
+    publisher = {arXiv},
+    year = {2022},
+    copyright = {Creative Commons Attribution 4.0 International}
+    }   
 
 # Setup
 
-Create and activate a virtual environment.
-
-If you use conda, run the following commands to create and activate the conda environment (use python version >= 3.6).
-
-```bash
-conda create --name stork_venv python=3.6 pip
-conda activate stork_venv
-pip install -r requirements.txt
-```
-
-If you additionally want to install stork, run
-```bash
-pip install -e .
-```
-in this directory, what will run `setup.py` for stork.
+1. Create and activate a virtual environment. 
+2. Change into this directory.
+3. Install the requirements with
+> pip install -r requirements.txt
+4. Install `stork` with
+> pip install . -e
 
 # Examples
 
