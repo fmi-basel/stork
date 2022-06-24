@@ -157,10 +157,11 @@ def plot_activity_snapshot(model, data=None, labels=None, pred=None, nb_samples=
             ax.axis("off")
             if i == 0:
                 label = "Hidden"
-                # if hidden_groups[h].name is not None:
-                #     label = hidden_groups[h].name
-                if nb_groups > 1:
-                    label = "Hid. %i" % (h+1)
+                if hidden_groups[h].name is not None:
+                    label = hidden_groups[h].name
+                else:
+                    if nb_groups > 1:
+                        label = "Hid. %i" % (h+1)
                 ax.text(-0.15, 0.5, label, text_props, color="black",
                         transform=ax.transAxes, fontsize=8, rotation=90)
 
