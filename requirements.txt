@@ -8,3 +8,4 @@ jupyter         # notebook support
 soundfile       
 tables
 torchvision
+git+https://github.com/fzenke/randman
