@@ -1,6 +1,10 @@
 numpy
 torch
+scipy
+matplotlib      # plotting
+seaborn         # plotting
+h5py            # Data file format
+jupyter         # notebook support
+soundfile       
+tables
 torchvision
-pandas
-
-matplotlib
