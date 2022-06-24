@@ -4,7 +4,8 @@
 from . import connections
 from . import nodes
 from . import utils
-
+from . import constraints
+from typing import Iterable
 
 class AbstractLayer():
     """
@@ -167,3 +168,77 @@ class ConvLayer(AbstractLayer):
             self.add_connection(con)
         
         self.output_group = nodes
+        
+
+class DalianLayer(AbstractLayer):
+    """
+    Implements a fully connected layer following Dale's law.
+    Consists of one Excitatory and one Inhibitory population
+    """
+    
+    def __init__(self, name, model, size, input_group, ei_ratio=4, recurrent=True, regs=None, w_regs=None,
+                 connection_class=connections.Connection, neuron_class=nodes.ExcInhLIFGroup,
+                 exc_neuron_kwargs={}, inh_neuron_kwargs={}, 
+                 ff_connection_kwargs={}, rec_inh_connection_kwargs={},rec_exc_connection_kwargs={}
+                 ) -> None:
+
+        super().__init__(name, model, recurrent=recurrent, dalian=True)
+        
+        # Add Dalian constraint
+        pos_constraint = constraints.MinMaxConstraint(min=0.0)
+
+        # Compute inhibitory layer size 
+        if isinstance(size, Iterable):
+            # For conv layer
+            size_inh = (int(tuple(size)[0] / ei_ratio),) + tuple(size)[1:]
+        else:
+            # For normal layer
+            size_inh = int(size / ei_ratio)
+            
+        size = tuple(size) if isinstance(size, Iterable) else size
+
+        # Make Exc neuron group
+        nodes_exc = neuron_class(size, name=self.name + ' exc', regularizers=regs,
+                             **exc_neuron_kwargs)
+        self.add_neurons(nodes_exc)
+        
+        # Make Inh neuron group
+        nodes_inh = neuron_class(size_inh, name=self.name + ' inh', regularizers=regs,
+                             **inh_neuron_kwargs)
+        self.add_neurons(nodes_inh, inhibitory=True)
+        
+        # Make afferent connections
+        con_XE = connection_class(input_group, nodes_exc, name = 'XE', regularizers=w_regs,
+                                  constraints=pos_constraint, **ff_connection_kwargs)
+        self.add_connection(con_XE, recurrent=False, inhibitory=False)
+
+        con_XI = connection_class(input_group, nodes_inh, name = 'XI', regularizers=w_regs,
+                                  constraints=pos_constraint, **ff_connection_kwargs)
+        self.add_connection(con_XI, recurrent=False, inhibitory=False)
+        
+        # RECURRENT CONNECTIONS: INHIBITORY
+        # # # # # # # # # # # # # #  
+        
+        con_II = connection_class(nodes_inh, nodes_inh, target='inh', name='II', regularizers=w_regs, 
+                                  constraints=pos_constraint, **rec_inh_connection_kwargs)
+        self.add_connection(con_II, recurrent=False, inhibitory=True)
+        
+        con_IE = connection_class(nodes_inh, nodes_exc, target='inh', name='IE', regularizers=w_regs, 
+                                  constraints=pos_constraint, **rec_inh_connection_kwargs)
+        self.add_connection(con_IE, recurrent=False, inhibitory=True)   
+                
+        # RECURRENT CONNECTIONS: EXCITATORY
+        # # # # # # # # # # # # # # 
+        
+        if recurrent:
+            
+            con_EI = connection_class(nodes_exc, nodes_inh, name='EI', regularizers=w_regs, 
+                            constraints=pos_constraint, **rec_exc_connection_kwargs)
+            self.add_connection(con_EI, recurrent=True, inhibitory=False)
+
+            con_EE = connection_class(nodes_exc, nodes_exc, name='EE', regularizers=w_regs, 
+                            constraints=pos_constraint, **rec_exc_connection_kwargs)
+            self.add_connection(con_EE, recurrent=True, inhibitory=False)
+            
+
+        self.output_group = nodes_exc
