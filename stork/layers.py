@@ -88,7 +88,7 @@ class Layer(AbstractLayer):
     
     
     def __init__(self, name, model, size, input_group, recurrent=True, regs=None, w_regs=None,
-                 connection_class=connections.Connection, neuron_class=nodes.LIFGroup, 
+                 connection_class=connections.Connection, neuron_class=nodes.LIFGroup, flatten_input_layer = True,
                  neuron_kwargs={}, connection_kwargs={}) -> None:
         
         super().__init__(name, model, recurrent)
@@ -100,6 +100,7 @@ class Layer(AbstractLayer):
         
         # Make afferent connection
         con = connection_class(input_group, nodes, regularizers=w_regs, 
+                               flatten_input=flatten_input_layer,
                                **connection_kwargs)
         self.add_connection(con)
         
@@ -177,7 +178,7 @@ class DalianLayer(AbstractLayer):
     """
     
     def __init__(self, name, model, size, input_group, ei_ratio=4, recurrent=True, regs=None, w_regs=None,
-                 connection_class=connections.Connection, neuron_class=nodes.ExcInhLIFGroup,
+                 connection_class=connections.Connection, neuron_class=nodes.ExcInhLIFGroup, flatten_input_layer = True,
                  exc_neuron_kwargs={}, inh_neuron_kwargs={}, 
                  ff_connection_kwargs={}, rec_inh_connection_kwargs={},rec_exc_connection_kwargs={}
                  ) -> None:
@@ -209,11 +210,13 @@ class DalianLayer(AbstractLayer):
         
         # Make afferent connections
         con_XE = connection_class(input_group, nodes_exc, name = 'XE', regularizers=w_regs,
-                                  constraints=pos_constraint, **ff_connection_kwargs)
+                                  constraints=pos_constraint, **ff_connection_kwargs,
+                                  flatten_input=flatten_input_layer)
         self.add_connection(con_XE, recurrent=False, inhibitory=False)
 
         con_XI = connection_class(input_group, nodes_inh, name = 'XI', regularizers=w_regs,
-                                  constraints=pos_constraint, **ff_connection_kwargs)
+                                  constraints=pos_constraint, **ff_connection_kwargs,
+                                  flatten_input=flatten_input_layer)
         self.add_connection(con_XI, recurrent=False, inhibitory=False)
         
         # RECURRENT CONNECTIONS: INHIBITORY
