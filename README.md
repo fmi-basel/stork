@@ -26,12 +26,13 @@ If you find this library useful and use it for your research projects, please ci
 ```
 # Setup
 
-1. Create and activate a virtual environment. 
-2. Change into this directory.
-3. Install the requirements with
+1. Download stork
+2. Create and activate a virtual environment. 
+3. Change into the stork directory.
+4. Install the requirements with
     > pip install -r requirements.txt
-4. Install `stork` with
-    > pip install . -e
+5. Install `stork` with
+    > pip install -e .
 
 # Examples
 
