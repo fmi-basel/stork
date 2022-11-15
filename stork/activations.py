@@ -319,7 +319,7 @@ class ExponentialStochasticSpike(torch.autograd.Function):
         ctx.save_for_backward(input)
         out = torch.zeros_like(input)
         prob = ExponentialStochasticSpike.p0 * \
-            torch.exp(input*ExponentialStochasticSpike.eps_0 /
+            torch.exp((input * ExponentialStochasticSpike.eps_0 / 0.1 + ExponentialStochasticSpike.eps_0 / 0.1 - 1) /
                       ExponentialStochasticSpike.delta_u)
         if prob.get_device() < 0:
             p = torch.rand(size=prob.shape)
@@ -340,9 +340,9 @@ class ExponentialStochasticSpike(torch.autograd.Function):
         input, = ctx.saved_tensors
         grad_input = grad_output.clone()
         p = ExponentialStochasticSpike.p0 * \
-            torch.exp(input*ExponentialStochasticSpike.eps_0 /
+            torch.exp((input * ExponentialStochasticSpike.eps_0 / 0.1 + ExponentialStochasticSpike.eps_0 / 0.1 - 1) /
                       ExponentialStochasticSpike.delta_u)
-        dp = p / ExponentialStochasticSpike.delta_u*ExponentialStochasticSpike.eps_0
+        dp = p / ExponentialStochasticSpike.delta_u * ExponentialStochasticSpike.eps_0
         grad = grad_input*dp
         return grad
 
@@ -366,7 +366,7 @@ class MultilayerSpikerSpike(torch.autograd.Function):
         """
         out = torch.zeros_like(input)
         prob = MultilayerSpikerSpike.p0 * \
-            torch.exp(input*MultilayerSpikerSpike.eps_0 /
+            torch.exp((input * MultilayerSpikerSpike.eps_0 / 0.1 + MultilayerSpikerSpike.eps_0 / 0.1 - 1) /
                       MultilayerSpikerSpike.delta_u)
         if prob.get_device() < 0:
             p = torch.rand(size=prob.shape)
