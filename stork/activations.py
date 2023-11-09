@@ -9,18 +9,19 @@ class SuperSpike(torch.autograd.Function):
     The steepness parameter beta can be accessed via the static member
     self.beta.
     """
-    beta = 20.0
+
+    beta = 20
 
     @staticmethod
     def forward(ctx, input):
         """
         In the forward pass we receive a Tensor containing the input and return
         a Tensor containing the step function output. ctx is the context object
-        that is used to stash information for backward pass computations. 
+        that is used to stash information for backward pass computations.
         """
         ctx.save_for_backward(input)
         out = torch.zeros_like(input)
-        out[input > 0] = 1.0
+        out[input > 0] = 1
         return out
 
     @staticmethod
@@ -32,32 +33,116 @@ class SuperSpike(torch.autograd.Function):
         negative part of a fast sigmoid as this was done in Zenke & Ganguli
         (2018).
         """
-        input, = ctx.saved_tensors
+        (input,) = ctx.saved_tensors
         grad_input = grad_output.clone()
-        grad = grad_input/(SuperSpike.beta*torch.abs(input)+1.0)**2
+        grad = grad_input / (SuperSpike.beta * torch.abs(input) + 1) ** 2
         return grad
 
 
-class SuperSpike_MemClamp(torch.autograd.Function):
+class CustomSpike(torch.autograd.Function):
     """
-    Variant of SuperSpike with clamped membrane potential at 1.0
+    Customizable autograd SuperSpike nonlinearity implementation that allows for escape noise in the
+    forward path and uses a surrogate gradient on the backward path.
+
+    If escape_noise_type is "step", forward will be a step function and otherwise sampled given the
+    indicated escape noise function.
+
+    Supported surrogate types ["SuperSpike", "sigmoid", "MultilayerSpiker", "exponential"]
+    Supported escape noise types are ["step", "sigmoid", "exponential"]
+
+    both parameters are dicts, that may contain the following parameters ["beta", "p0", "delta_u"]
     """
-    beta = 20.0
+
+    escape_noise_type = "step"
+    escape_noise_params = {"beta": 10, "p0": 0.01, "delta_u": 0.133}
+    surrogate_type = "SuperSpike"
+    surrogate_params = {"beta": 10, "p0": 0.01, "delta_u": 0.133}
 
     @staticmethod
     def forward(ctx, input):
-        """
-        In the forward pass we receive a Tensor containing the input and return
-        a Tensor containing the step function output. ctx is the context object
-        that is used to stash information for backward pass computations. 
-        """
-        ctx.save_for_backward(input)
-        out = torch.zeros_like(input)
-        out[input > 0] = 1.0
-        return out
+        match CustomSpike.escape_noise_type:
+            case "step":
+                return CustomSpike.forward_step(ctx, input)
+            case "sigmoid":
+                return CustomSpike.forward_sigmoid_s(ctx, input)
+            case "exponential":
+                return CustomSpike.forward_exponential_s(ctx, input)
+            case _:
+                raise ValueError(
+                    "Escape noise type not supported. Please chose one of the following: step, sigmoid, exponential"
+                )
 
     @staticmethod
     def backward(ctx, grad_output):
+        match CustomSpike.surrogate_type:
+            case "SuperSpike":
+                return CustomSpike.backward_superspike(ctx, grad_output)
+            case "sigmoid":
+                return CustomSpike.backward_sigmoid(ctx, grad_output)
+            case "MultilayerSpiker":
+                return CustomSpike.backward_multilayerspiker(ctx, grad_output)
+            case "exponential":
+                return CustomSpike.backward_exponential(ctx, grad_output)
+            case _:
+                raise ValueError(
+                    "Surrogate type not supported. Please chose one of the following: SuperSpike, sigmoid, MultilayerSpiker, exponential"
+                )
+
+    @staticmethod
+    def forward_step(ctx, input):
+        """
+        In the forward pass we receive a Tensor containing the input and return
+        a Tensor containing the step function output. ctx is the context object
+        that is used to stash information for backward pass computations.
+        """
+        ctx.save_for_backward(input)
+        out = torch.zeros_like(input)
+        out[input > 0] = 1
+        return out
+
+    @staticmethod
+    def forward_sigmoid_s(ctx, input):
+        """
+        In the forward pass we receive a Tensor containing the input and return
+        a Tensor containing the output using a sigmoidal probability of spiking.
+        ctx is the context object that is used to stash information for backward
+        pass computations.
+        """
+        ctx.save_for_backward(input)
+        out = torch.zeros_like(input)
+        prob = torch.sigmoid(CustomSpike.escape_noise_params["beta"] * input)
+        if prob.get_device() < 0:
+            p = torch.rand(size=prob.shape)
+        else:
+            p = torch.rand(size=prob.shape, device=prob.get_device())
+        out[prob > p] = 1
+        return out
+
+    p0 = 0.01
+    delta_u = 0.133
+
+    @staticmethod
+    def forward_exponential_s(ctx, input):
+        """
+        In the forward pass we receive a Tensor containing the input and return
+        a Tensor containing the output using an exponential probability of spiking.
+        ctx is the context object that is used to stash information for backward
+        pass computations.
+        """
+        ctx.save_for_backward(input)
+        out = torch.zeros_like(input)
+        prob = CustomSpike.escape_noise_params["p0"] * torch.exp(
+            input / CustomSpike.escape_noise_params["delta_u"]
+        )
+        if prob.get_device() < 0:
+            p = torch.rand(size=prob.shape)
+        else:
+            p = torch.rand(size=prob.shape, device=prob.get_device())
+        out[prob > p] = 1
+        return out
+
+    @staticmethod
+    def backward_superspike(ctx, grad_output):
         """
         In the backward pass we receive a Tensor containing the gradient of the
         loss with respect to the output, and we compute the surrogate gradient
@@ -65,46 +150,58 @@ class SuperSpike_MemClamp(torch.autograd.Function):
         negative part of a fast sigmoid as this was done in Zenke & Ganguli
         (2018).
         """
-        input, = ctx.saved_tensors
+        (input,) = ctx.saved_tensors
         grad_input = grad_output.clone()
-        grad = grad_input/(SuperSpike_MemClamp.beta *
-                           torch.abs(torch.relu(-input))+1.0)**2
+        grad = (
+            grad_input
+            / (CustomSpike.surrogate_params["beta"] * torch.abs(input) + 1) ** 2
+        )
         return grad
 
-
-class SuperSpike_rescaled(torch.autograd.Function):
-    """
-    Version of SuperSpike where the gradient is re-scaled so that it equals one at 
-    resting membrane potential
-    """
-    beta = 20.0
-
     @staticmethod
-    def forward(ctx, input):
-        """
-        In the forward pass we receive a Tensor containing the input and return
-        a Tensor containing the step function output. ctx is the context object
-        that is used to stash information for backward pass computations. 
-        """
-        ctx.save_for_backward(input)
-        out = torch.zeros_like(input)
-        out[input > 0] = 1.0
-        return out
-
-    @staticmethod
-    def backward(ctx, grad_output):
+    def backward_sigmoid(ctx, grad_output):
         """
         In the backward pass we receive a Tensor containing the gradient of the
         loss with respect to the output, and we compute the surrogate gradient
-        of the loss with respect to the input. Here we assume the standardized
-        negative part of a fast sigmoid as this was done in Zenke & Ganguli
-        (2018).
+        of the loss with respect to the input, considering a the gradient of a
+        sigmoid function as the surrogate gradient.
         """
-        input, = ctx.saved_tensors
+        (input,) = ctx.saved_tensors
         grad_input = grad_output.clone()
-        rescale_val = 1 / ((SuperSpike_rescaled.beta+1)**2)
-        grad = grad_input/(SuperSpike_rescaled.beta *
-                           torch.abs(input)+1.0)**2 / rescale_val
+        sig = torch.sigmoid(CustomSpike.surrogate_params["beta"] * input)
+        dsig = CustomSpike.surrogate_params["beta"] * sig * (1 - sig)
+        grad = grad_input * dsig
+        return grad
+
+    @staticmethod
+    def backward_multilayerspiker(ctx, grad_output):
+        """
+        In the backward pass we receive a Tensor containing the gradient of the
+        loss with respect to the output, and we replace the derivative of a spiketrain
+        by the spiketrain itself (see Gardner et al., 2015)
+        """
+        (out,) = ctx.saved_tensors
+        grad_input = grad_output.clone()
+        grad = grad_input * out
+        return grad
+
+    @staticmethod
+    def backward_exponential(ctx, grad_output):
+        """
+        In the backward pass we receive a Tensor containing the gradient of the
+        loss with respect to the output, and we compute the gradient using a
+        straight-through estimator, meaning the derivative of the hard threshold
+        is replaced by one, while only using the derivative of the probability of
+        spiking.
+        """
+        (input,) = ctx.saved_tensors
+        grad_input = grad_output.clone()
+        p = (
+            CustomSpike.surrogate_params["p0"]
+            / CustomSpike.surrogate_params["delta_u"]
+            * torch.exp(input / CustomSpike.surrogate_params["delta_u"])
+        )
+        grad = grad_input * p
         return grad
 
 
@@ -115,19 +212,19 @@ class MultiSpike(torch.autograd.Function):
     The steepness parameter beta can be accessed via the static member
     self.beta (default=100).
     """
-    beta = 100.0
-    maxspk = 10.0
+
+    beta = 100
+    maxspk = 10
 
     @staticmethod
     def forward(ctx, input):
         """
         In the forward pass we receive a Tensor containing the input and return
         a Tensor containing the step function output. ctx is the context object
-        that is used to stash information for backward pass computations. 
+        that is used to stash information for backward pass computations.
         """
         ctx.save_for_backward(input)
-        out = nn.functional.hardtanh(
-            torch.round(input+0.5), 0.0, MultiSpike.maxspk)
+        out = nn.functional.hardtanh(torch.round(input + 0.5), 0, MultiSpike.maxspk)
         return out
 
     @staticmethod
@@ -139,10 +236,13 @@ class MultiSpike(torch.autograd.Function):
         negative part of a fast sigmoid as this was done in Zenke & Ganguli
         (2018).
         """
-        input, = ctx.saved_tensors
+        (input,) = ctx.saved_tensors
         grad_input = grad_output.clone()
-        grad = grad_input/(MultiSpike.beta*torch.abs(input -
-                           torch.relu(torch.round(input)))+1.0)**2
+        grad = (
+            grad_input
+            / (MultiSpike.beta * torch.abs(input - torch.relu(torch.round(input))) + 1)
+            ** 2
+        )
         return grad
 
 
@@ -153,18 +253,19 @@ class SuperSpike_asymptote(torch.autograd.Function):
     The steepness parameter beta can be accessed via the static member
     self.beta (default=100).
     """
-    beta = 100.0
+
+    beta = 100
 
     @staticmethod
     def forward(ctx, input):
         """
         In the forward pass we receive a Tensor containing the input and return
         a Tensor containing the step function output. ctx is the context object
-        that is used to stash information for backward pass computations. 
+        that is used to stash information for backward pass computations.
         """
         ctx.save_for_backward(input)
         out = torch.zeros_like(input)
-        out[input > 0] = 1.0
+        out[input > 0] = 1
         return out
 
     @staticmethod
@@ -176,10 +277,13 @@ class SuperSpike_asymptote(torch.autograd.Function):
         negative part of a fast sigmoid as this was done in Zenke & Ganguli
         (2018).
         """
-        input, = ctx.saved_tensors
+        (input,) = ctx.saved_tensors
         grad_input = grad_output.clone()
-        grad = SuperSpike_asymptote.beta*grad_input / \
-            (SuperSpike_asymptote.beta*torch.abs(input)+1.0)**2
+        grad = (
+            SuperSpike_asymptote.beta
+            * grad_input
+            / (SuperSpike_asymptote.beta * torch.abs(input) + 1) ** 2
+        )
         return grad
 
 
@@ -190,18 +294,19 @@ class TanhSpike(torch.autograd.Function):
     The steepness parameter beta can be accessed via the static member
     self.beta (default=100).
     """
-    beta = 100.0
+
+    beta = 100
 
     @staticmethod
     def forward(ctx, input):
         """
         In the forward pass we receive a Tensor containing the input and return
         a Tensor containing the step function output. ctx is the context object
-        that is used to stash information for backward pass computations. 
+        that is used to stash information for backward pass computations.
         """
         ctx.save_for_backward(input)
         out = torch.zeros_like(input)
-        out[input > 0] = 1.0
+        out[input > 0] = 1
         return out
 
     @staticmethod
@@ -213,221 +318,10 @@ class TanhSpike(torch.autograd.Function):
         negative part of a fast sigmoid as this was done in Zenke & Ganguli
         (2018).
         """
-        input, = ctx.saved_tensors
+        (input,) = ctx.saved_tensors
         grad_input = grad_output.clone()
         beta = TanhSpike.beta
-        grad = grad_input*(1.0+(1.0-torch.tanh(input*beta)**2))
-        return grad
-
-
-class SigmoidSpike(torch.autograd.Function):
-    """
-    Autograd surrogate gradient nonlinearity implementation which uses the derivative of a sigmoid in the backward pass.
-
-    The steepness parameter beta can be accessed via the static member self.beta (default=100).
-    """
-    beta = 2
-
-    @staticmethod
-    def forward(ctx, input):
-        """
-        In the forward pass we receive a Tensor containing the input and return
-        a Tensor containing the step function output. ctx is the context object
-        that is used to stash information for backward pass computations. 
-        """
-        ctx.save_for_backward(input)
-        out = torch.zeros_like(input)
-        out[input > 0] = 1.0
-        return out
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        """
-        In the backward pass we receive a Tensor containing the gradient of the
-        loss with respect to the output, and we compute the surrogate gradient
-        of the loss with respect to the input. Here we assume the standardized
-        negative part of a fast sigmoid as this was done in Zenke & Ganguli
-        (2018).
-        """
-        input, = ctx.saved_tensors
-        grad_input = grad_output.clone()
-        sig = torch.sigmoid(SigmoidSpike.beta*input)
-        dsig = sig*(1.0-sig)
-        grad = grad_input*dsig
-        return grad
-
-
-class StochasticSpike(torch.autograd.Function):
-    """
-    Stochastic spike implementation, where the probability of a spike follows a sigmoid. The backward path uses a straight-through estimator, where the derivative of a hard threshold is 1 and the derivative of the probability of spiking (derivative of a sigmoid) is consiedered in the backward pass.
-
-    The steepness parameter beta can be accessed via the static member self.beta (default=20).
-    """
-    beta = 2
-
-    @staticmethod
-    def forward(ctx, input):
-        """
-        In the forward pass we receive a Tensor containing the input and return
-        a Tensor containing the step function output. ctx is the context object
-        that is used to stash information for backward pass computations. 
-        """
-        ctx.save_for_backward(input)
-        out = torch.zeros_like(input)
-        prob = torch.sigmoid(StochasticSpike.beta*input)
-        if prob.get_device() < 0:
-            p = torch.rand(size=prob.shape)
-        else:
-            p = torch.rand(size=prob.shape, device=prob.get_device())
-        out[prob > p] = 1
-        return out
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        """
-        In the backward pass we receive a Tensor containing the gradient of the
-        loss with respect to the output, and we compute the surrogate gradient
-        of the loss with respect to the input. Here we assume the standardized
-        negative part of a fast sigmoid as this was done in Zenke & Ganguli
-        (2018).
-        """
-        input, = ctx.saved_tensors
-        grad_input = grad_output.clone()
-        sig = torch.sigmoid(StochasticSpike.beta*input)
-        dsig = sig*(1.0-sig)
-        grad = grad_input*dsig
-        return grad
-
-
-class ExponentialStochasticSpike(torch.autograd.Function):
-    """
-    Stochastic spike implementation, where the probability of a spike follows an exponential. The backward pass uses the derivative of the probability of spiking.
-
-    The parameters p0 and delta_u can be accessed via the static member self.p0 (default=0.01) or self.delta_u (default=0.2).
-    """
-    p0 = 0.01
-    delta_u = 0.013
-    eps_0 = 0.267
-
-    @staticmethod
-    def forward(ctx, input):
-        """
-        In the forward pass we receive a Tensor containing the input and return
-        a Tensor containing the step function output. ctx is the context object
-        that is used to stash information for backward pass computations. 
-        """
-        ctx.save_for_backward(input)
-        out = torch.zeros_like(input)
-        prob = ExponentialStochasticSpike.p0 * \
-            torch.exp((input * ExponentialStochasticSpike.eps_0 / 0.1 + ExponentialStochasticSpike.eps_0 / 0.1 - 1) /
-                      ExponentialStochasticSpike.delta_u)
-        if prob.get_device() < 0:
-            p = torch.rand(size=prob.shape)
-        else:
-            p = torch.rand(size=prob.shape, device=prob.get_device())
-        out[prob > p] = 1
-        return out
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        """
-        In the backward pass we receive a Tensor containing the gradient of the
-        loss with respect to the output, and we compute the surrogate gradient
-        of the loss with respect to the input. Here we assume the standardized
-        negative part of a fast sigmoid as this was done in Zenke & Ganguli
-        (2018).
-        """
-        input, = ctx.saved_tensors
-        grad_input = grad_output.clone()
-        p = ExponentialStochasticSpike.p0 * \
-            torch.exp((input * ExponentialStochasticSpike.eps_0 / 0.1 + ExponentialStochasticSpike.eps_0 / 0.1 - 1) /
-                      ExponentialStochasticSpike.delta_u)
-        dp = p / ExponentialStochasticSpike.delta_u * ExponentialStochasticSpike.eps_0
-        grad = grad_input*dp
-        return grad
-
-
-class MultilayerSpikerSpike(torch.autograd.Function):
-    """
-    Stochastic spike implementation, where the probability of a spike follows an exponential. The backward pass uses the spiketrain itself as the derivative of the spike train.
-
-    The parameters p0 and delta_u can be accessed via the static member self.p0 (default=0.01) or self.delta_u (default=0.2).
-    """
-    p0 = 0.01
-    delta_u = 0.013
-    eps_0 = 0.267
-
-    @staticmethod
-    def forward(ctx, input):
-        """
-        In the forward pass we receive a Tensor containing the input and return
-        a Tensor containing the step function output. ctx is the context object
-        that is used to stash information for backward pass computations. 
-        """
-        out = torch.zeros_like(input)
-        prob = MultilayerSpikerSpike.p0 * \
-            torch.exp((input * MultilayerSpikerSpike.eps_0 / 0.1 + MultilayerSpikerSpike.eps_0 / 0.1 - 1) /
-                      MultilayerSpikerSpike.delta_u)
-        if prob.get_device() < 0:
-            p = torch.rand(size=prob.shape)
-        else:
-            p = torch.rand(size=prob.shape, device=prob.get_device())
-        out[prob > p] = 1
-        ctx.save_for_backward(out)
-        return out
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        """
-        In the backward pass we receive a Tensor containing the gradient of the
-        loss with respect to the output, and we compute the surrogate gradient
-        of the loss with respect to the input. Here we assume the standardized
-        negative part of a fast sigmoid as this was done in Zenke & Ganguli
-        (2018).
-        """
-        out, = ctx.saved_tensors
-        grad_input = grad_output.clone()
-        grad = grad_input*out
-        return grad
-
-
-class SigmoidalMultilayerSpikerSpike(torch.autograd.Function):
-    """
-    Stochastic spike implementation, where the probability of a spike follows a sigmoid. The backward pass uses the spiketrain itself as the derivative of the spike train.
-
-    The steepness parameter beta can be accessed via the static member self.beta (default=20).
-    """
-    beta = 2
-
-    @staticmethod
-    def forward(ctx, input):
-        """
-        In the forward pass we receive a Tensor containing the input and return
-        a Tensor containing the step function output. ctx is the context object
-        that is used to stash information for backward pass computations. 
-        """
-        ctx.save_for_backward(input)
-        out = torch.zeros_like(input)
-        prob = torch.sigmoid(SigmoidalMultilayerSpikerSpike.beta*input)
-        if prob.get_device() < 0:
-            p = torch.rand(size=prob.shape)
-        else:
-            p = torch.rand(size=prob.shape, device=prob.get_device())
-        out[prob > p] = 1
-        return out
-
-    @staticmethod
-    def backward(ctx, grad_output):
-        """
-        In the backward pass we receive a Tensor containing the gradient of the
-        loss with respect to the output, and we compute the surrogate gradient
-        of the loss with respect to the input. Here we assume the standardized
-        negative part of a fast sigmoid as this was done in Zenke & Ganguli
-        (2018).
-        """
-        out, = ctx.saved_tensors
-        grad_input = grad_output.clone()
-        grad = grad_input*out
+        grad = grad_input * (1 + (1 - torch.tanh(input * beta) ** 2))
         return grad
 
 
@@ -441,20 +335,21 @@ class EsserSpike(torch.autograd.Function):
         neuromorphic computing. Proc Natl Acad Sci U S A 113, 11441–11446.
         https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5068316/
 
-    The steepness parameter beta can be accessed via the static member self.beta (default=1.0).
+    The steepness parameter beta can be accessed via the static member self.beta (default=1).
     """
-    beta = 1.0
+
+    beta = 1
 
     @staticmethod
     def forward(ctx, input):
         """
         In the forward pass we receive a Tensor containing the input and return
         a Tensor containing the step function output. ctx is the context object
-        that is used to stash information for backward pass computations. 
+        that is used to stash information for backward pass computations.
         """
         ctx.save_for_backward(input)
         out = torch.zeros_like(input)
-        out[input > 0] = 1.0
+        out[input > 0] = 1
         return out
 
     @staticmethod
@@ -466,11 +361,11 @@ class EsserSpike(torch.autograd.Function):
         negative part of a fast sigmoid as this was done in Zenke & Ganguli
         (2018).
         """
-        input, = ctx.saved_tensors
+        (input,) = ctx.saved_tensors
         grad_input = grad_output.clone()
-        grad = grad_input * \
-            torch.max(torch.zeros_like(input), 1.0 -
-                      torch.abs(EsserSpike.beta*input))
+        grad = grad_input * torch.max(
+            torch.zeros_like(input), 1 - torch.abs(EsserSpike.beta * input)
+        )
         return grad
 
 
@@ -481,18 +376,19 @@ class HardTanhSpike(torch.autograd.Function):
     The steepness parameter beta can be accessed via the static member
     self.beta (default=100).
     """
-    beta = 100.0
+
+    beta = 100
 
     @staticmethod
     def forward(ctx, input):
         """
         In the forward pass we receive a Tensor containing the input and return
         a Tensor containing the step function output. ctx is the context object
-        that is used to stash information for backward pass computations. 
+        that is used to stash information for backward pass computations.
         """
         ctx.save_for_backward(input)
         out = torch.zeros_like(input)
-        out[input > 0] = 1.0
+        out[input > 0] = 1
         return out
 
     @staticmethod
@@ -504,10 +400,10 @@ class HardTanhSpike(torch.autograd.Function):
         negative part of a fast sigmoid as this was done in Zenke & Ganguli
         (2018).
         """
-        input, = ctx.saved_tensors
+        (input,) = ctx.saved_tensors
         grad_input = grad_output.clone()
         beta = HardTanhSpike.beta
-        grad = grad_input*(1.0+torch.nn.functional.hardtanh(input*beta))
+        grad = grad_input * (1 + torch.nn.functional.hardtanh(input * beta))
         return grad
 
 
@@ -518,7 +414,8 @@ class SuperSpike_norm(torch.autograd.Function):
     The steepness parameter beta can be accessed via the static member
     self.beta (default=100).
     """
-    beta = 100.0
+
+    beta = 100
     xi = 1e-2
 
     @staticmethod
@@ -526,11 +423,11 @@ class SuperSpike_norm(torch.autograd.Function):
         """
         In the forward pass we receive a Tensor containing the input and return
         a Tensor containing the step function output. ctx is the context object
-        that is used to stash information for backward pass computations. 
+        that is used to stash information for backward pass computations.
         """
         ctx.save_for_backward(input)
         out = torch.zeros_like(input)
-        out[input > 0] = 1.0
+        out[input > 0] = 1
         return out
 
     @staticmethod
@@ -542,10 +439,50 @@ class SuperSpike_norm(torch.autograd.Function):
         negative part of a fast sigmoid as this was done in Zenke & Ganguli
         (2018).
         """
-        input, = ctx.saved_tensors
+        (input,) = ctx.saved_tensors
         grad_input = grad_output.clone()
-        grad = grad_input/(SuperSpike_norm.beta*torch.abs(input)+1.0)**2
+        grad = grad_input / (SuperSpike_norm.beta * torch.abs(input) + 1) ** 2
         # standardize gradient
-        standard_grad = grad/(SuperSpike_norm.xi +
-                              torch.norm(torch.mean(grad, dim=0)))
+        standard_grad = grad / (
+            SuperSpike_norm.xi + torch.norm(torch.mean(grad, dim=0))
+        )
         return standard_grad
+
+
+class FunSpike(torch.autograd.Function):
+    """
+    Autograd FunSpike nonlinearity implementation for testing.
+
+    The steepness parameter beta can be accessed via the static member
+    self.beta (default=100).
+    """
+
+    beta = 100
+
+    @staticmethod
+    def forward(ctx, input):
+        """
+        In the forward pass we receive a Tensor containing the input and return
+        a Tensor containing the step function output. ctx is the context object
+        that is used to stash information for backward pass computations.
+        """
+        ctx.save_for_backward(input)
+        out = torch.zeros_like(input)
+        out[input > 0] = 1
+        return out
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        """
+        In the backward pass we receive a Tensor containing the gradient of the
+        loss with respect to the output, and we compute the surrogate gradient
+        of the loss with respect to the input. Here we assume the standardized
+        negative part of a fast sigmoid as this was done in Zenke & Ganguli
+        (2018).
+        """
+        (input,) = ctx.saved_tensors
+        grad_input = grad_output.clone()
+        grad = grad_input / (FunSpike.beta * torch.abs(input) + 1) ** 2
+        # grad = grad-torch.mean(grad,1,keepdim=True)
+        grad = grad - torch.mean(grad, 0)
+        return grad
