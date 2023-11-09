@@ -41,7 +41,7 @@ class SuperSpike(torch.autograd.Function):
 
 class CustomSpike(torch.autograd.Function):
     """
-    Customizable autograd SuperSpike nonlinearity implementation that allows for escape noise in the
+    Customizable autograd SuperSpike nonlinearity implementation that allows for escape noise in the 
     forward path and uses a surrogate gradient on the backward path.
 
     If escape_noise_type is "step", forward will be a step function and otherwise sampled given the
