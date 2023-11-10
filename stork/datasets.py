@@ -190,7 +190,7 @@ def make_tempo_randman(nb_classes=10, nb_units=100, nb_steps=100, offset_frac=0.
     if seed is not None:
         np.random.seed(seed)
 
-    max_value = np.iinfo(np.int).max
+    max_value = np.iinfo(np.int_).max
     randman_seeds = np.random.randint(max_value, size=(nb_classes, nb_spikes))
 
     for k in range(nb_classes):
@@ -222,7 +222,7 @@ def make_tempo_randman(nb_classes=10, nb_units=100, nb_steps=100, offset_frac=0.
         targets.append(x)
 
     data = np.concatenate(data, axis=0)
-    labels = np.array(np.concatenate(labels, axis=0), dtype=np.int)
+    labels = np.array(np.concatenate(labels, axis=0), dtype=np.int_)
     targets = np.concatenate(targets, axis=0)
 
     if shuffle:
@@ -486,7 +486,7 @@ def split_dataset(X, y, splits=[0.8, 0.2], shuffle=True):
     splits /= splits.sum()
 
     if shuffle:
-        idx = np.arange(len(X), dtype=np.int)
+        idx = np.arange(len(X), dtype=np.int_)
         np.random.shuffle(idx)
         X = X[idx]
         y = y[idx]
@@ -1023,7 +1023,7 @@ class TextDataset(torch.utils.data.Dataset):
         char2int = {ch: ii for ii, ch in int2char.items()}
 
         # Encode the text
-        encoded = np.array([char2int[ch] for ch in text], dtype=np.int)
+        encoded = np.array([char2int[ch] for ch in text], dtype=np.int_)
         nb_samples = int(len(encoded) // nb_steps)
         encoded = encoded[:nb_samples * nb_steps]  # truncate
         self.data = encoded.reshape((nb_samples, nb_steps))

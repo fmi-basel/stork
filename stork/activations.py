@@ -10,7 +10,7 @@ class SuperSpike(torch.autograd.Function):
     self.beta.
     """
 
-    beta = 20.0
+    beta = 20
 
     @staticmethod
     def forward(ctx, input):
@@ -21,7 +21,7 @@ class SuperSpike(torch.autograd.Function):
         """
         ctx.save_for_backward(input)
         out = torch.zeros_like(input)
-        out[input > 0] = 1.0
+        out[input > 0] = 1
         return out
 
     @staticmethod
@@ -35,7 +35,7 @@ class SuperSpike(torch.autograd.Function):
         """
         (input,) = ctx.saved_tensors
         grad_input = grad_output.clone()
-        grad = grad_input / (SuperSpike.beta * torch.abs(input) + 1.0) ** 2
+        grad = grad_input / (SuperSpike.beta * torch.abs(input) + 1) ** 2
         return grad
 
 
@@ -60,33 +60,31 @@ class CustomSpike(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, input):
-        match CustomSpike.escape_noise_type:
-            case "step":
-                return CustomSpike.forward_step(ctx, input)
-            case "sigmoid":
-                return CustomSpike.forward_sigmoid_s(ctx, input)
-            case "exponential":
-                return CustomSpike.forward_exponential_s(ctx, input)
-            case _:
-                raise ValueError(
-                    "Escape noise type not supported. Please chose one of the following: step, sigmoid, exponential"
-                )
+        if CustomSpike.escape_noise_type == "step":
+            return CustomSpike.forward_step(ctx, input)
+        elif CustomSpike.escape_noise_type == "sigmoid":
+            return CustomSpike.forward_sigmoid_s(ctx, input)
+        elif CustomSpike.escape_noise_type == "exponential":
+            return CustomSpike.forward_exponential_s(ctx, input)
+        else:
+            raise ValueError(
+                "Escape noise type not supported. Please chose one of the following: step, sigmoid, exponential"
+            )
 
     @staticmethod
     def backward(ctx, grad_output):
-        match CustomSpike.surrogate_type:
-            case "SuperSpike":
-                return CustomSpike.backward_superspike(ctx, grad_output)
-            case "sigmoid":
-                return CustomSpike.backward_sigmoid(ctx, grad_output)
-            case "MultilayerSpiker":
-                return CustomSpike.backward_multilayerspiker(ctx, grad_output)
-            case "exponential":
-                return CustomSpike.backward_exponential(ctx, grad_output)
-            case _:
-                raise ValueError(
-                    "Surrogate type not supported. Please chose one of the following: SuperSpike, sigmoid, MultilayerSpiker, exponential"
-                )
+        if CustomSpike.surrogate_type == "SuperSpike":
+            return CustomSpike.backward_superspike(ctx, grad_output)
+        elif CustomSpike.surrogate_type == "sigmoid":
+            return CustomSpike.backward_sigmoid(ctx, grad_output)
+        elif CustomSpike.surrogate_type == "MultilayerSpiker":
+            return CustomSpike.backward_multilayerspiker(ctx, grad_output)
+        elif CustomSpike.surrogate_type == "exponential":
+            return CustomSpike.backward_exponential(ctx, grad_output)
+        else:
+            raise ValueError(
+                "Surrogate type not supported. Please chose one of the following: SuperSpike, sigmoid, MultilayerSpiker, exponential"
+            )
 
     @staticmethod
     def forward_step(ctx, input):
@@ -290,8 +288,8 @@ class MultiSpike(torch.autograd.Function):
     self.beta (default=100).
     """
 
-    beta = 100.0
-    maxspk = 10.0
+    beta = 100
+    maxspk = 10
 
     @staticmethod
     def forward(ctx, input):
@@ -301,7 +299,7 @@ class MultiSpike(torch.autograd.Function):
         that is used to stash information for backward pass computations.
         """
         ctx.save_for_backward(input)
-        out = nn.functional.hardtanh(torch.round(input + 0.5), 0.0, MultiSpike.maxspk)
+        out = nn.functional.hardtanh(torch.round(input + 0.5), 0, MultiSpike.maxspk)
         return out
 
     @staticmethod
@@ -317,10 +315,7 @@ class MultiSpike(torch.autograd.Function):
         grad_input = grad_output.clone()
         grad = (
             grad_input
-            / (
-                MultiSpike.beta * torch.abs(input - torch.relu(torch.round(input)))
-                + 1.0
-            )
+            / (MultiSpike.beta * torch.abs(input - torch.relu(torch.round(input))) + 1)
             ** 2
         )
         return grad
@@ -334,7 +329,7 @@ class SuperSpike_asymptote(torch.autograd.Function):
     self.beta (default=100).
     """
 
-    beta = 100.0
+    beta = 100
 
     @staticmethod
     def forward(ctx, input):
@@ -345,7 +340,7 @@ class SuperSpike_asymptote(torch.autograd.Function):
         """
         ctx.save_for_backward(input)
         out = torch.zeros_like(input)
-        out[input > 0] = 1.0
+        out[input > 0] = 1
         return out
 
     @staticmethod
@@ -362,7 +357,7 @@ class SuperSpike_asymptote(torch.autograd.Function):
         grad = (
             SuperSpike_asymptote.beta
             * grad_input
-            / (SuperSpike_asymptote.beta * torch.abs(input) + 1.0) ** 2
+            / (SuperSpike_asymptote.beta * torch.abs(input) + 1) ** 2
         )
         return grad
 
@@ -375,7 +370,7 @@ class TanhSpike(torch.autograd.Function):
     self.beta (default=100).
     """
 
-    beta = 100.0
+    beta = 100
 
     @staticmethod
     def forward(ctx, input):
@@ -386,7 +381,7 @@ class TanhSpike(torch.autograd.Function):
         """
         ctx.save_for_backward(input)
         out = torch.zeros_like(input)
-        out[input > 0] = 1.0
+        out[input > 0] = 1
         return out
 
     @staticmethod
@@ -401,7 +396,7 @@ class TanhSpike(torch.autograd.Function):
         (input,) = ctx.saved_tensors
         grad_input = grad_output.clone()
         beta = TanhSpike.beta
-        grad = grad_input * (1.0 + (1.0 - torch.tanh(input * beta) ** 2))
+        grad = grad_input * (1 + (1 - torch.tanh(input * beta) ** 2))
         return grad
 
 
@@ -415,10 +410,10 @@ class EsserSpike(torch.autograd.Function):
         neuromorphic computing. Proc Natl Acad Sci U S A 113, 11441–11446.
         https://www.ncbi.nlm.nih.gov/pmc/articles/PMC5068316/
 
-    The steepness parameter beta can be accessed via the static member self.beta (default=1.0).
+    The steepness parameter beta can be accessed via the static member self.beta (default=1).
     """
 
-    beta = 1.0
+    beta = 1
 
     @staticmethod
     def forward(ctx, input):
@@ -429,7 +424,7 @@ class EsserSpike(torch.autograd.Function):
         """
         ctx.save_for_backward(input)
         out = torch.zeros_like(input)
-        out[input > 0] = 1.0
+        out[input > 0] = 1
         return out
 
     @staticmethod
@@ -444,7 +439,7 @@ class EsserSpike(torch.autograd.Function):
         (input,) = ctx.saved_tensors
         grad_input = grad_output.clone()
         grad = grad_input * torch.max(
-            torch.zeros_like(input), 1.0 - torch.abs(EsserSpike.beta * input)
+            torch.zeros_like(input), 1 - torch.abs(EsserSpike.beta * input)
         )
         return grad
 
@@ -457,7 +452,7 @@ class HardTanhSpike(torch.autograd.Function):
     self.beta (default=100).
     """
 
-    beta = 100.0
+    beta = 100
 
     @staticmethod
     def forward(ctx, input):
@@ -468,7 +463,7 @@ class HardTanhSpike(torch.autograd.Function):
         """
         ctx.save_for_backward(input)
         out = torch.zeros_like(input)
-        out[input > 0] = 1.0
+        out[input > 0] = 1
         return out
 
     @staticmethod
@@ -483,7 +478,7 @@ class HardTanhSpike(torch.autograd.Function):
         (input,) = ctx.saved_tensors
         grad_input = grad_output.clone()
         beta = HardTanhSpike.beta
-        grad = grad_input * (1.0 + torch.nn.functional.hardtanh(input * beta))
+        grad = grad_input * (1 + torch.nn.functional.hardtanh(input * beta))
         return grad
 
 
@@ -495,7 +490,7 @@ class SuperSpike_norm(torch.autograd.Function):
     self.beta (default=100).
     """
 
-    beta = 100.0
+    beta = 100
     xi = 1e-2
 
     @staticmethod
@@ -507,7 +502,7 @@ class SuperSpike_norm(torch.autograd.Function):
         """
         ctx.save_for_backward(input)
         out = torch.zeros_like(input)
-        out[input > 0] = 1.0
+        out[input > 0] = 1
         return out
 
     @staticmethod
@@ -521,7 +516,7 @@ class SuperSpike_norm(torch.autograd.Function):
         """
         (input,) = ctx.saved_tensors
         grad_input = grad_output.clone()
-        grad = grad_input / (SuperSpike_norm.beta * torch.abs(input) + 1.0) ** 2
+        grad = grad_input / (SuperSpike_norm.beta * torch.abs(input) + 1) ** 2
         # standardize gradient
         standard_grad = grad / (
             SuperSpike_norm.xi + torch.norm(torch.mean(grad, dim=0))
