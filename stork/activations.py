@@ -60,33 +60,31 @@ class CustomSpike(torch.autograd.Function):
 
     @staticmethod
     def forward(ctx, input):
-        match CustomSpike.escape_noise_type:
-            case "step":
-                return CustomSpike.forward_step(ctx, input)
-            case "sigmoid":
-                return CustomSpike.forward_sigmoid_s(ctx, input)
-            case "exponential":
-                return CustomSpike.forward_exponential_s(ctx, input)
-            case _:
-                raise ValueError(
-                    "Escape noise type not supported. Please chose one of the following: step, sigmoid, exponential"
-                )
+        if CustomSpike.escape_noise_type == "step":
+            return CustomSpike.forward_step(ctx, input)
+        elif CustomSpike.escape_noise_type == "sigmoid":
+            return CustomSpike.forward_sigmoid_s(ctx, input)
+        elif CustomSpike.escape_noise_type == "exponential":
+            return CustomSpike.forward_exponential_s(ctx, input)
+        else:
+            raise ValueError(
+                "Escape noise type not supported. Please chose one of the following: step, sigmoid, exponential"
+            )
 
     @staticmethod
     def backward(ctx, grad_output):
-        match CustomSpike.surrogate_type:
-            case "SuperSpike":
-                return CustomSpike.backward_superspike(ctx, grad_output)
-            case "sigmoid":
-                return CustomSpike.backward_sigmoid(ctx, grad_output)
-            case "MultilayerSpiker":
-                return CustomSpike.backward_multilayerspiker(ctx, grad_output)
-            case "exponential":
-                return CustomSpike.backward_exponential(ctx, grad_output)
-            case _:
-                raise ValueError(
-                    "Surrogate type not supported. Please chose one of the following: SuperSpike, sigmoid, MultilayerSpiker, exponential"
-                )
+        if CustomSpike.surrogate_type == "SuperSpike":
+            return CustomSpike.backward_superspike(ctx, grad_output)
+        elif CustomSpike.surrogate_type == "sigmoid":
+            return CustomSpike.backward_sigmoid(ctx, grad_output)
+        elif CustomSpike.surrogate_type == "MultilayerSpiker":
+            return CustomSpike.backward_multilayerspiker(ctx, grad_output)
+        elif CustomSpike.surrogate_type == "exponential":
+            return CustomSpike.backward_exponential(ctx, grad_output)
+        else:
+            raise ValueError(
+                "Surrogate type not supported. Please chose one of the following: SuperSpike, sigmoid, MultilayerSpiker, exponential"
+            )
 
     @staticmethod
     def forward_step(ctx, input):
