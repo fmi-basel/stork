@@ -141,7 +141,7 @@ def plot_activity_snapshot(
     point_size=5,
     point_alpha=1,
     pal=sns.color_palette("muted", n_colors=20),
-    bg_col="#DDDDDD",
+    bg_col="#CCCCCC",
 ):
     # Run model once and get activities
     scores = model.evaluate(data, one_batch=True).tolist()
@@ -197,7 +197,7 @@ def plot_activity_snapshot(
             if line_index == data[i][1]:
                 ax[0][i].plot(ro_line, color=pal[line_index])
             else:
-                ax[0][i].plot(ro_line, color=bg_col, zorder=-5)
+                ax[0][i].plot(ro_line, color=bg_col, zorder=-5, alpha=0.5)
 
             turn_axis_off(ax[0][i])
 
@@ -215,8 +215,8 @@ def doubleData_plot_activity_snapshot(
     point_size=5,
     point_alpha=1,
     pal=sns.color_palette("muted", n_colors=20),
-    bg_col="#BBBBBB",
-    bg_col2="#DDDDDD"
+    bg_col="#AAAAAA",
+    bg_col2="#CCCCCC",
 ):
     # Run model once and get activities
     scores = model.evaluate(data, one_batch=True).tolist()
@@ -232,7 +232,7 @@ def doubleData_plot_activity_snapshot(
     hr = [1] + [4 * g.nb_units / nb_total_units for g in hidden_groups] + [1]
 
     n = model.nb_inputs // 2
-    m = out_group.shape[-1]
+    m = out_group.shape[-1] // 2
 
     fig, ax = plt.subplots(
         nb_groups + 2,
@@ -246,7 +246,6 @@ def doubleData_plot_activity_snapshot(
 
     for i in range(nb_samples):
         # plot and color input spikes
-        print("i", inp[i].shape)
         ax[-1][i].scatter(
             np.where(inp[i, :, :n])[0],
             np.where(inp[i, :, :n])[1],
@@ -254,9 +253,7 @@ def doubleData_plot_activity_snapshot(
             marker=marker,
             color=pal[data[0][i][1]],
         )
-        print(len(pal))
-        print(data[1][i][1] + n)
-        print(n)
+
         ax[-1][i].scatter(
             np.where(inp[i, :, n:])[0],
             np.where(inp[i, :, n:])[1] + n,
@@ -283,12 +280,13 @@ def doubleData_plot_activity_snapshot(
             ax[-(2 + g)][0].set_ylabel("Hid. " + str(g))
 
         for line_index, ro_line in enumerate(np.transpose(out_group[i])):
-            if line_index == data[0][i][1] or line_index == data[1][i][1] + n:
+            if line_index == data[0][i][1] or line_index == data[1][i][1] + m:
                 ax[0][i].plot(ro_line, color=pal[line_index])
             else:
-                if line_index < n:
-                    ax[0][i].plot(ro_line, color=bg_col, zorder=-5)
-                else: ax[0][i].plot(ro_line, color=bg_col2, zorder=-5)
+                if line_index < m:
+                    ax[0][i].plot(ro_line, color=bg_col, zorder=-5, alpha=0.5)
+                else:
+                    ax[0][i].plot(ro_line, color=bg_col2, zorder=-5, alpha=0.5)
 
             turn_axis_off(ax[0][i])
 
