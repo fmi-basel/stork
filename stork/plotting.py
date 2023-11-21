@@ -27,7 +27,7 @@ def add_xscalebar(ax, length, label=None, pos=(0.0, -0.1), off=(0.0, -0.07), **k
         off=off,
         verticalalignment="top",
         horizontalalignment="center",
-        **kwargs
+        **kwargs,
     )
 
 
@@ -41,7 +41,7 @@ def add_yscalebar(ax, length, label=None, pos=(-0.1, 0.0), off=(-0.07, 0.0), **k
         verticalalignment="center",
         horizontalalignment="left",
         rotation=90,
-        **kwargs
+        **kwargs,
     )
 
 
@@ -53,7 +53,7 @@ def dense2scatter_plot(
     marker=".",
     time_step=1e-3,
     jitter=None,
-    **kwargs
+    **kwargs,
 ):
     ras = datasets.dense2ras(dense, time_step)
     if len(ras):
@@ -66,7 +66,53 @@ def dense2scatter_plot(
             s=point_size,
             alpha=alpha,
             marker=marker,
-            **kwargs
+            **kwargs,
+        )
+
+
+def double_dense2scatter_plot(
+    ax,
+    dense,
+    point_size=5,
+    alpha=1.0,
+    marker=".",
+    time_step=1e-3,
+    jitter=None,
+    color0="black",
+    color1="black",
+    **kwargs,
+):
+    n = dense.shape[1] // 2
+    ras0 = datasets.dense2ras(dense[:, :n], time_step)
+    ras1 = datasets.dense2ras(dense[:, n:], time_step)
+
+    if len(ras0):
+        noise = np.zeros(ras0[:, 0].shape)
+        if jitter is not None:
+            noise = jitter * np.random.randn(*ras0[:, 0].shape)
+
+        ax.scatter(
+            ras0[:, 0] + noise[:],
+            ras0[:, 1],
+            s=point_size,
+            alpha=alpha,
+            marker=marker,
+            color=color0,
+            **kwargs,
+        )
+    if len(ras1):
+        noise = np.zeros(ras1[:, 0].shape)
+        if jitter is not None:
+            noise = jitter * np.random.randn(*ras1[:, 0].shape)
+
+        ax.scatter(
+            ras1[:, 0] + noise[:],
+            ras1[:, 1] + len(ras0),
+            s=point_size,
+            alpha=alpha,
+            marker=marker,
+            color=color1,
+            **kwargs,
         )
 
 
@@ -93,7 +139,8 @@ def plot_activity_snapshot(
     show_input_class=True,
     input_heatmap=False,
     pal=None,
-    n_colors=20,
+    n_colors=None,
+    double_data=False,
 ):
     """Plot an activity snapshot
 
@@ -117,20 +164,34 @@ def plot_activity_snapshot(
         n_colors (int, optional): Number of different classes (colors). Defaults to 20.
     """
 
+    # get the labels from the dataset
     if data is not None and labels is None:
-        labels = [d[1] for d in data]
-    if data is not None:
-        pred = model.predict(data)
+        if double_data:
+            labels = [(d1[1], d2[1]) for d1, d2 in zip(data[0], data[1])]
+        else:
+            labels = [d[1] for d in data]
 
-    nb_batches = len(data) // model.batch_size
-    if len(data) // model.batch_size < len(data) / model.batch_size:
-        size_of_last_batch = len(data) - nb_batches * model.batch_size
+    # compute batch sizes and size of last batch
+    if double_data:
+        l_data = len(data[0])
+    else:
+        l_data = len(data)
+    nb_batches = l_data // model.batch_size
+    if l_data // model.batch_size < l_data / model.batch_size:
+        size_of_last_batch = l_data - nb_batches * model.batch_size
         nb_batches += 1
     else:
         size_of_last_batch = model.batch_size
+    
+    nb_samples = min(nb_samples, size_of_last_batch)
 
-    pred = pred[-size_of_last_batch:]
-    if labels is not None:
+    if show_predictions:
+        # get the predictions from the model
+        if data is not None:
+            pred = model.predict(data)
+            pred = pred[-size_of_last_batch:]
+
+    if n_colors is None and labels is not None:
         n_colors = len(np.unique(labels))
         labels = labels[-size_of_last_batch:]
 
@@ -158,6 +219,8 @@ def plot_activity_snapshot(
         np.random.shuffle(idx)
 
     text_props = {"ha": "center", "va": "center", "fontsize": 8}
+
+    # loop over all samples
     for i in range(nb_samples):
         if i == 0:
             a0 = ax = plt.subplot(gs[i + (nb_groups + 1) * nb_samples])
@@ -190,21 +253,43 @@ def plot_activity_snapshot(
         # Colored input class
         if show_input_class and data is not None:
             clipped = np.clip(labels, 0, len(pal) - 1)
-            color = pal[int(clipped[k])]
+            if double_data:
+                color0 = pal[int(clipped[k][0])]
+                color1 = pal[int(clipped[k][1]) + n_colors // 2]
+            else:
+                color = pal[int(clipped[k])]
         else:
             color = "black"
+            color0 = "black"
+            color1 = "black"
 
         if not input_heatmap:
-            dense2scatter_plot(
-                ax,
-                in_group[k],
-                marker=marker,
-                point_size=point_size,
-                alpha=point_alpha,
-                time_step=time_step,
-                color=color,
-                jitter=time_jitter,
-            )
+            if double_data:
+                double_dense2scatter_plot(
+                    ax,
+                    in_group[k],
+                    marker=marker,
+                    point_size=point_size,
+                    alpha=point_alpha,
+                    time_step=time_step,
+                    color0=color0,
+                    color1=color1,
+                    jitter=time_jitter,
+                )
+            else:
+                dense2scatter_plot(
+                    ax,
+                    in_group[k],
+                    marker=marker,
+                    point_size=point_size,
+                    alpha=point_alpha,
+                    time_step=time_step,
+                    color=color,
+                    jitter=time_jitter,
+                )
+
+            ax.set_ylim(-1, model.input_group.nb_units)
+            ax.set_xlim(0, model.nb_time_steps * time_step)
         else:
             shape = in_group[k].shape
             ax.imshow(
@@ -280,12 +365,25 @@ def plot_activity_snapshot(
 
         for line_index, ro_line in enumerate(np.transpose(out_group[k])):
             if labels is not None:
-                if line_index != int(labels[k]):
-                    color = "#DDDDDD"
-                    zorder = 5
+                if double_data:
+                    if line_index != int(labels[k][0]) and line_index != int(
+                        labels[k][1] + n_colors // 2
+                    ):
+                        if line_index < n_colors // 2:
+                            color = "#BBBBBB"
+                        else:
+                            color = "#DDDDDD"
+                        zorder = 5
+                    else:
+                        color = pal[line_index]
+                        zorder = 10
                 else:
-                    color = pal[line_index]
-                    zorder = 10
+                    if line_index != int(labels[k]):
+                        color = "#DDDDDD"
+                        zorder = 5
+                    else:
+                        color = pal[line_index]
+                        zorder = 10
             else:
                 color = "black"
             ax.plot(times, ro_line, color=color, zorder=zorder, lw=1)
