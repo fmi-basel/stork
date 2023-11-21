@@ -312,8 +312,8 @@ class RecurrentSpikingModel(nn.Module):
         s = ""
         names = self.get_metric_names(prefix, postfix)
         for val, name in zip(metrics_array, names):
-            s = s + " %s=%.3g" % (name, val)
-        return s
+            s = s + " %s = %.3e," % (name, val)
+        return s[:-1]
 
     def get_metrics_history_dict(self, metrics_array, prefix="", postfix=""):
         " Create metrics history dict. " ""
@@ -370,7 +370,7 @@ class RecurrentSpikingModel(nn.Module):
         return history
 
     def fit_validate(
-        self, dataset, valid_dataset, nb_epochs=10, verbose=True, wandb=None
+        self, dataset, valid_dataset, nb_epochs=10, verbose=True, wandb=None, log_intervall=10
     ):
         self.hist_train = []
         self.hist_valid = []
@@ -398,17 +398,18 @@ class RecurrentSpikingModel(nn.Module):
                 )
 
             if verbose:
-                t_iter = time.time() - t_start
-                self.wall_clock_time.append(t_iter)
-                print(
-                    "%02i %s --%s t_iter=%.2f"
-                    % (
-                        ep,
-                        self.get_metrics_string(ret_train),
-                        self.get_metrics_string(ret_valid, prefix="val_"),
-                        t_iter,
+                if ep % log_intervall == 0:
+                    t_iter = time.time() - t_start
+                    self.wall_clock_time.append(t_iter)
+                    print(
+                        "%02i %s --%s t_iter=%.2f"
+                        % (
+                            ep,
+                            self.get_metrics_string(ret_train),
+                            self.get_metrics_string(ret_valid, prefix="val_"),
+                            t_iter,
+                        )
                     )
-                )
 
         self.hist = np.concatenate(
             (np.array(self.hist_train), np.array(self.hist_valid))
