@@ -4,7 +4,7 @@ from stork.nodes.input.base import InputGroup
 
 
 class SparseInputGroup(InputGroup):
-    """ Like InputGroup but eats sparse tensors instead of dense ones. """
+    """Like InputGroup but eats sparse tensors instead of dense ones."""
 
     def __init__(self, shape):
         super(InputGroup, self).__init__(shape)

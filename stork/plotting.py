@@ -182,7 +182,7 @@ def plot_activity_snapshot(
         nb_batches += 1
     else:
         size_of_last_batch = model.batch_size
-    
+
     nb_samples = min(nb_samples, size_of_last_batch)
 
     if show_predictions:

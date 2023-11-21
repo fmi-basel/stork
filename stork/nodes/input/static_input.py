@@ -9,7 +9,7 @@ class StaticInputGroup(InputGroup):
         self.scale = scale
 
     def feed_data(self, data):
-        self.local_data = data.reshape(( (data.shape[0],) + self.shape)).to(self.device)
+        self.local_data = data.reshape(((data.shape[0],) + self.shape)).to(self.device)
 
     def forward(self):
         self.out = self.states["out"] = self.scale * self.local_data

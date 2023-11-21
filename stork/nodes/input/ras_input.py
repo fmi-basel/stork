@@ -5,7 +5,7 @@ from stork.nodes.input.base import InputGroup
 
 
 class RasInputGroup(InputGroup):
-    """ Like InputGroup but eats ras format instead of dense tensors. """
+    """Like InputGroup but eats ras format instead of dense tensors."""
 
     def feed_data(self, data):
         super().feed_data(data)

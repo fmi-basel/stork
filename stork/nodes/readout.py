@@ -5,7 +5,15 @@ from stork.nodes.base import CellGroup
 
 
 class ReadoutGroup(CellGroup):
-    def __init__(self, shape, tau_mem=10e-3, tau_syn=5e-3, weight_scale=1.0, initial_state=-1e-3, stateful=False):
+    def __init__(
+        self,
+        shape,
+        tau_mem=10e-3,
+        tau_syn=5e-3,
+        weight_scale=1.0,
+        initial_state=-1e-3,
+        stateful=False,
+    ):
         super().__init__(shape, stateful=stateful, name="Readout")
         self.tau_mem = tau_mem
         self.tau_syn = tau_syn
@@ -35,5 +43,3 @@ class ReadoutGroup(CellGroup):
         self.out = self.states["out"] = new_mem
         self.syn = self.states["syn"] = new_syn
         # self.out_seq.append(self.out)
-
-
