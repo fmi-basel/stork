@@ -122,7 +122,181 @@ def save_plots(fileprefix, extensions=["pdf", "png"], dpi=300):
         plt.savefig("%s.%s" % (fileprefix, ext), dpi=dpi, bbox_inches="tight")
 
 
+def turn_axis_off(ax):
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.spines["left"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
+
+
 def plot_activity_snapshot(
+    model,
+    data,
+    nb_samples=5,
+    figsize=(10, 5),
+    dpi=250,
+    marker=".",
+    point_size=5,
+    point_alpha=1,
+    pal=sns.color_palette("muted", n_colors=20),
+    bg_col="#DDDDDD",
+):
+    # Run model once and get activities
+    scores = model.evaluate(data, one_batch=True).tolist()
+    inp = model.input_group.get_flattened_out_sequence().detach().cpu().numpy()
+    hidden_groups = model.groups[1:-1]
+    hid_activity = [
+        g.get_flattened_out_sequence().detach().cpu().numpy() for g in hidden_groups
+    ]
+    out_group = model.out.detach().cpu().numpy()
+
+    nb_groups = len(hidden_groups)
+    nb_total_units = np.sum([g.nb_units for g in hidden_groups])
+    hr = [1] + [4 * g.nb_units / nb_total_units for g in hidden_groups] + [1]
+
+    fig, ax = plt.subplots(
+        nb_groups + 2,
+        nb_samples,
+        figsize=figsize,
+        dpi=dpi,
+        sharex=True,
+        sharey="row",
+        gridspec_kw={"height_ratios": hr},
+    )
+
+    for i in range(nb_samples):
+        # plot and color input spikes
+        ax[-1][i].scatter(
+            np.where(inp[i])[0],
+            np.where(inp[i])[1],
+            s=point_size,
+            marker=marker,
+            color=pal[data[i][1]],
+        )
+        ax[-1][i].set_ylim(-1, model.nb_inputs)
+        ax[-1][i].set_xlim(-1, model.nb_time_steps)
+        turn_axis_off(ax[-1][i])
+
+        # plot hidden layer spikes
+        for g in range(nb_groups):
+            ax[-(2 + g)][i].scatter(
+                np.where(hid_activity[g][i])[0],
+                np.where(hid_activity[g][i])[1],
+                s=point_size / 2,
+                marker=marker,
+                color="k",
+                alpha=point_alpha,
+            )
+            turn_axis_off(ax[-(2 + g)][i])
+
+            ax[-(2 + g)][0].set_ylabel("Hid. " + str(g))
+
+        for line_index, ro_line in enumerate(np.transpose(out_group[i])):
+            if line_index == data[i][1]:
+                ax[0][i].plot(ro_line, color=pal[line_index])
+            else:
+                ax[0][i].plot(ro_line, color=bg_col, zorder=-5)
+
+            turn_axis_off(ax[0][i])
+
+    ax[-1][0].set_ylabel("Input")
+    ax[0][0].set_ylabel("Readout")
+
+
+def doubleData_plot_activity_snapshot(
+    model,
+    data,
+    nb_samples=5,
+    figsize=(10, 5),
+    dpi=250,
+    marker=".",
+    point_size=5,
+    point_alpha=1,
+    pal=sns.color_palette("muted", n_colors=20),
+    bg_col="#BBBBBB",
+    bg_col2="#DDDDDD"
+):
+    # Run model once and get activities
+    scores = model.evaluate(data, one_batch=True).tolist()
+    inp = model.input_group.get_flattened_out_sequence().detach().cpu().numpy()
+    hidden_groups = model.groups[1:-1]
+    hid_activity = [
+        g.get_flattened_out_sequence().detach().cpu().numpy() for g in hidden_groups
+    ]
+    out_group = model.out.detach().cpu().numpy()
+
+    nb_groups = len(hidden_groups)
+    nb_total_units = np.sum([g.nb_units for g in hidden_groups])
+    hr = [1] + [4 * g.nb_units / nb_total_units for g in hidden_groups] + [1]
+
+    n = model.nb_inputs // 2
+    m = out_group.shape[-1]
+
+    fig, ax = plt.subplots(
+        nb_groups + 2,
+        nb_samples,
+        figsize=figsize,
+        dpi=dpi,
+        sharex=True,
+        sharey="row",
+        gridspec_kw={"height_ratios": hr},
+    )
+
+    for i in range(nb_samples):
+        # plot and color input spikes
+        print("i", inp[i].shape)
+        ax[-1][i].scatter(
+            np.where(inp[i, :, :n])[0],
+            np.where(inp[i, :, :n])[1],
+            s=point_size,
+            marker=marker,
+            color=pal[data[0][i][1]],
+        )
+        print(len(pal))
+        print(data[1][i][1] + n)
+        print(n)
+        ax[-1][i].scatter(
+            np.where(inp[i, :, n:])[0],
+            np.where(inp[i, :, n:])[1] + n,
+            s=point_size,
+            marker=marker,
+            color=pal[data[1][i][1] + m],
+        )
+        ax[-1][i].set_ylim(-1, model.nb_inputs)
+        ax[-1][i].set_xlim(-1, model.nb_time_steps)
+        turn_axis_off(ax[-1][i])
+
+        # plot hidden layer spikes
+        for g in range(nb_groups):
+            ax[-(2 + g)][i].scatter(
+                np.where(hid_activity[g][i])[0],
+                np.where(hid_activity[g][i])[1],
+                s=point_size / 2,
+                marker=marker,
+                color="k",
+                alpha=point_alpha,
+            )
+            turn_axis_off(ax[-(2 + g)][i])
+
+            ax[-(2 + g)][0].set_ylabel("Hid. " + str(g))
+
+        for line_index, ro_line in enumerate(np.transpose(out_group[i])):
+            if line_index == data[0][i][1] or line_index == data[1][i][1] + n:
+                ax[0][i].plot(ro_line, color=pal[line_index])
+            else:
+                if line_index < n:
+                    ax[0][i].plot(ro_line, color=bg_col, zorder=-5)
+                else: ax[0][i].plot(ro_line, color=bg_col2, zorder=-5)
+
+            turn_axis_off(ax[0][i])
+
+    ax[-1][0].set_ylabel("Input")
+    ax[0][0].set_ylabel("Readout")
+
+
+def plot_activity_snapshot_old(
     model,
     data=None,
     labels=None,

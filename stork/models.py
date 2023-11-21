@@ -244,7 +244,7 @@ class RecurrentSpikingModel(nn.Module):
 
         return total_loss
 
-    def evaluate(self, test_dataset, train_mode=False):
+    def evaluate(self, test_dataset, train_mode=False, one_batch=False):
         self.train(train_mode)
         self.prepare_data(test_dataset)
         metrics = []
@@ -255,6 +255,8 @@ class RecurrentSpikingModel(nn.Module):
             metrics.append(
                 [self.out_loss.item(), self.reg_loss.item()] + self.loss_stack.metrics
             )
+            if one_batch:
+                break
 
         return np.mean(np.array(metrics), axis=0)
 
@@ -312,7 +314,10 @@ class RecurrentSpikingModel(nn.Module):
         s = ""
         names = self.get_metric_names(prefix, postfix)
         for val, name in zip(metrics_array, names):
-            s = s + " %s = %.3e," % (name, val)
+            if "acc" in name:
+                s = s + " {} = {:.1%},".format(name, val)
+            else:
+                s = s + " {} = {:.3e},".format(name, val)
         return s[:-1]
 
     def get_metrics_history_dict(self, metrics_array, prefix="", postfix=""):
@@ -370,7 +375,13 @@ class RecurrentSpikingModel(nn.Module):
         return history
 
     def fit_validate(
-        self, dataset, valid_dataset, nb_epochs=10, verbose=True, wandb=None, log_intervall=10
+        self,
+        dataset,
+        valid_dataset,
+        nb_epochs=10,
+        verbose=True,
+        wandb=None,
+        log_intervall=10,
     ):
         self.hist_train = []
         self.hist_valid = []
@@ -772,7 +783,7 @@ class DoubleInputRecSpikingModel(RecurrentSpikingModel):
 
         return np.mean(np.array(metrics), axis=0)
 
-    def evaluate(self, dataset, train_mode=False):
+    def evaluate(self, dataset, train_mode=False, one_batch=False):
         self.train(train_mode)
         # self.prepare_data(test_dataset)
         metrics = []
@@ -793,5 +804,7 @@ class DoubleInputRecSpikingModel(RecurrentSpikingModel):
             metrics.append(
                 [self.out_loss.item(), self.reg_loss.item()] + self.loss_stack.metrics
             )
+            if one_batch:
+                break
 
         return np.mean(np.array(metrics), axis=0)
