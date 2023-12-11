@@ -51,11 +51,17 @@ class RecurrentSpikingModel(nn.Module):
         generator=None,
         time_step=1e-3,
         wandb=None,
+        anneal_interval=0,
+        anneal_step=0,
+        anneal_start=0,
     ):
         self.input_group = input
         self.output_group = output
         self.time_step = time_step
         self.wandb = wandb
+        self.anneal_interval = anneal_interval
+        self.anneal_step = anneal_step
+        self.anneal_start = anneal_start
 
         if loss_stack is not None:
             self.loss_stack = loss_stack
@@ -381,7 +387,8 @@ class RecurrentSpikingModel(nn.Module):
         nb_epochs=10,
         verbose=True,
         wandb=None,
-        log_intervall=10,
+        log_interval=10,
+        anneal=True,
     ):
         self.hist_train = []
         self.hist_valid = []
@@ -409,7 +416,7 @@ class RecurrentSpikingModel(nn.Module):
                 )
 
             if verbose:
-                if ep % log_intervall == 0:
+                if ep % log_interval == 0:
                     t_iter = time.time() - t_start
                     self.wall_clock_time.append(t_iter)
                     print(
@@ -421,6 +428,30 @@ class RecurrentSpikingModel(nn.Module):
                             t_iter,
                         )
                     )
+            if anneal:
+                if ep >= self.anneal_start:
+                    if (ep - self.anneal_start) % self.anneal_interval == 0:
+                        for g in range(1, len(self.groups) - 1):
+                            try:
+                                beta = self.groups[g].act_fn.surrogate_params["beta"]
+                                print("beta", beta)
+                                self.groups[g].act_fn.surrogate_params["beta"] = (
+                                    beta + self.anneal_step
+                                )
+                                self.groups[g].spk_nl = self.groups[g].act_fn.apply
+                                print(
+                                    "annealed",
+                                    self.groups[g].act_fn.surrogate_params["beta"],
+                                )
+                            except:
+                                beta = self.groups[g].act_fn.beta
+                                print("beta", beta)
+                                self.groups[g].act_fn.beta = beta + self.anneal_step
+                                self.groups[g].spk_nl = self.groups[g].act_fn.apply
+                                print("annealed", self.groups[g].act_fn.beta)
+
+            #     if self.anneal_start > ep:
+            #         if ep % self.anneal_interval == 0:
 
         self.hist = np.concatenate(
             (np.array(self.hist_train), np.array(self.hist_valid))

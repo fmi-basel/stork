@@ -95,6 +95,51 @@ def turn_axis_off(ax):
     ax.spines["top"].set_visible(False)
 
 
+def plot_activity_over_trials(
+    model,
+    data,
+    ax,
+    layer_idx=0,
+    neuron_idx=0,
+    nb_trials=51,
+    marker=".",
+    point_size=5,
+    point_alpha=1,
+    color="black",
+    nolabel=False,
+):
+    # Run model once and get activities
+    scores = model.evaluate(data, one_batch=True).tolist()
+
+    hidden_groups = model.groups[1:-1]
+    hid_activity = [
+        g.get_flattened_out_sequence().detach().cpu().numpy() for g in hidden_groups
+    ]
+
+    nb_trials = np.min((nb_trials, hid_activity[layer_idx].shape[0]))
+
+    act = hid_activity[layer_idx][:, :, neuron_idx]
+    for i in range(nb_trials):
+        spikes = np.where(act[i])[0]
+        ax.scatter(
+            spikes,
+            np.ones_like(spikes) * i,
+            color=color,
+            alpha=point_alpha,
+            marker=marker,
+            s=point_size,
+        )
+
+    if not nolabel:
+        ax.set_ylabel("Trial idx")
+        ax.set_xlabel("Time (ms)")
+    ax.set_xlim(-1, model.nb_time_steps)
+    ax.set_ylim(-1, nb_trials)
+    ax.set_xticks([0, model.nb_time_steps])
+    ax.set_yticks([0, nb_trials - 1])
+    sns.despine()
+
+
 def plot_activity_snapshot(
     model,
     data,
@@ -131,7 +176,6 @@ def plot_activity_snapshot(
         inps = [inp1, inp2]
     else:
         inps = [inp]
-        data = [data]
 
     nb_groups = len(hidden_groups)
     nb_total_units = np.sum([g.nb_units for g in hidden_groups])
@@ -150,12 +194,16 @@ def plot_activity_snapshot(
     for i in range(nb_samples):
         # plot and color input spikes
         for idx, inp in enumerate(inps):
+            if double:
+                c = pal[data[idx][i][1] + idx * m]
+            else:
+                c = pal[data[i][1]]
             ax[-1][i].scatter(
                 np.where(inp[i])[0],
                 np.where(inp[i])[1] + idx * n,
                 s=point_size,
                 marker=marker,
-                color=pal[data[idx][i][1] + idx * m],
+                color=c,
             )
         ax[-1][i].set_ylim(-1, model.nb_inputs)
         ax[-1][i].set_xlim(-1, model.nb_time_steps)
@@ -176,14 +224,19 @@ def plot_activity_snapshot(
             ax[-(2 + g)][0].set_ylabel("Hid. " + str(g))
 
         for line_index, ro_line in enumerate(np.transpose(out_group[i])):
-            for d in range(len(data)):
-                if line_index == data[d][i][1] or line_index == data[d][i][1] + m:
+            if double:
+                if line_index == data[0][i][1] or line_index == data[1][i][1] + m:
                     ax[0][i].plot(ro_line, color=pal[line_index])
-            else:
-                if line_index < m:
-                    ax[0][i].plot(ro_line, color=bg_col, zorder=-5, alpha=0.5)
                 else:
-                    ax[0][i].plot(ro_line, color=bg_col2, zorder=-5, alpha=0.5)
+                    if line_index < m:
+                        ax[0][i].plot(ro_line, color=bg_col, zorder=-5, alpha=0.5)
+                    else:
+                        ax[0][i].plot(ro_line, color=bg_col2, zorder=-5, alpha=0.5)
+            else:
+                if line_index == data[i][1]:
+                    ax[0][i].plot(ro_line, color=pal[line_index])
+                else:
+                    ax[0][i].plot(ro_line, color=bg_col, zorder=-5, alpha=0.5)
 
             turn_axis_off(ax[0][i])
 
