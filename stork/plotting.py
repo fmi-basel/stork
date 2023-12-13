@@ -180,6 +180,7 @@ def plot_activity_snapshot(
     nb_groups = len(hidden_groups)
     nb_total_units = np.sum([g.nb_units for g in hidden_groups])
     hr = [1] + [4 * g.nb_units / nb_total_units for g in hidden_groups] + [1]
+    hr = list(reversed(hr))  # since we are plotting from bottom to top
 
     fig, ax = plt.subplots(
         nb_groups + 2,
@@ -261,8 +262,7 @@ def plot_activity_snapshot_old(
     show_input_class=True,
     input_heatmap=False,
     pal=None,
-    n_colors=None,
-    double_data=False,
+    n_colors=20,
 ):
     """Plot an activity snapshot
 
@@ -286,34 +286,20 @@ def plot_activity_snapshot_old(
         n_colors (int, optional): Number of different classes (colors). Defaults to 20.
     """
 
-    # get the labels from the dataset
     if data is not None and labels is None:
-        if double_data:
-            labels = [(d1[1], d2[1]) for d1, d2 in zip(data[0], data[1])]
-        else:
-            labels = [d[1] for d in data]
+        labels = [d[1] for d in data]
+    if data is not None:
+        pred = model.predict(data)
 
-    # compute batch sizes and size of last batch
-    if double_data:
-        l_data = len(data[0])
-    else:
-        l_data = len(data)
-    nb_batches = l_data // model.batch_size
-    if l_data // model.batch_size < l_data / model.batch_size:
-        size_of_last_batch = l_data - nb_batches * model.batch_size
+    nb_batches = len(data) // model.batch_size
+    if len(data) // model.batch_size < len(data) / model.batch_size:
+        size_of_last_batch = len(data) - nb_batches * model.batch_size
         nb_batches += 1
     else:
         size_of_last_batch = model.batch_size
 
-    nb_samples = min(nb_samples, size_of_last_batch)
-
-    if show_predictions:
-        # get the predictions from the model
-        if data is not None:
-            pred = model.predict(data)
-            pred = pred[-size_of_last_batch:]
-
-    if n_colors is None and labels is not None:
+    pred = pred[-size_of_last_batch:]
+    if labels is not None:
         n_colors = len(np.unique(labels))
         labels = labels[-size_of_last_batch:]
 
@@ -341,8 +327,6 @@ def plot_activity_snapshot_old(
         np.random.shuffle(idx)
 
     text_props = {"ha": "center", "va": "center", "fontsize": 8}
-
-    # loop over all samples
     for i in range(nb_samples):
         if i == 0:
             a0 = ax = plt.subplot(gs[i + (nb_groups + 1) * nb_samples])
@@ -375,43 +359,21 @@ def plot_activity_snapshot_old(
         # Colored input class
         if show_input_class and data is not None:
             clipped = np.clip(labels, 0, len(pal) - 1)
-            if double_data:
-                color0 = pal[int(clipped[k][0])]
-                color1 = pal[int(clipped[k][1]) + n_colors // 2]
-            else:
-                color = pal[int(clipped[k])]
+            color = pal[int(clipped[k])]
         else:
             color = "black"
-            color0 = "black"
-            color1 = "black"
 
         if not input_heatmap:
-            if double_data:
-                double_dense2scatter_plot(
-                    ax,
-                    in_group[k],
-                    marker=marker,
-                    point_size=point_size,
-                    alpha=point_alpha,
-                    time_step=time_step,
-                    color0=color0,
-                    color1=color1,
-                    jitter=time_jitter,
-                )
-            else:
-                dense2scatter_plot(
-                    ax,
-                    in_group[k],
-                    marker=marker,
-                    point_size=point_size,
-                    alpha=point_alpha,
-                    time_step=time_step,
-                    color=color,
-                    jitter=time_jitter,
-                )
-
-            ax.set_ylim(-1, model.input_group.nb_units)
-            ax.set_xlim(0, model.nb_time_steps * time_step)
+            dense2scatter_plot(
+                ax,
+                in_group[k],
+                marker=marker,
+                point_size=point_size,
+                alpha=point_alpha,
+                time_step=time_step,
+                color_list=[color],
+                jitter=time_jitter,
+            )
         else:
             shape = in_group[k].shape
             ax.imshow(
@@ -445,7 +407,7 @@ def plot_activity_snapshot_old(
                 point_size=point_size,
                 alpha=point_alpha,
                 time_step=time_step,
-                color="black",
+                # color="black",
                 jitter=time_jitter,
             )
             ax.axis("off")
@@ -487,25 +449,12 @@ def plot_activity_snapshot_old(
 
         for line_index, ro_line in enumerate(np.transpose(out_group[k])):
             if labels is not None:
-                if double_data:
-                    if line_index != int(labels[k][0]) and line_index != int(
-                        labels[k][1] + n_colors // 2
-                    ):
-                        if line_index < n_colors // 2:
-                            color = "#BBBBBB"
-                        else:
-                            color = "#DDDDDD"
-                        zorder = 5
-                    else:
-                        color = pal[line_index]
-                        zorder = 10
+                if line_index != int(labels[k]):
+                    color = "#DDDDDD"
+                    zorder = 5
                 else:
-                    if line_index != int(labels[k]):
-                        color = "#DDDDDD"
-                        zorder = 5
-                    else:
-                        color = pal[line_index]
-                        zorder = 10
+                    color = pal[line_index]
+                    zorder = 10
             else:
                 color = "black"
             ax.plot(times, ro_line, color=color, zorder=zorder, lw=1)
