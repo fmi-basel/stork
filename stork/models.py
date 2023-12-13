@@ -424,10 +424,10 @@ class RecurrentSpikingModel(nn.Module):
 
                 self.wandb.log({key: value for (key, value) in zip(metrics, values)})
 
-            if verbose:
-                if ep % logging_freq == 0:
-                    t_iter = time.time() - t_start
-                    self.wall_clock_time.append(t_iter)
+            if ep % logging_freq == 0:
+                t_iter = time.time() - t_start
+                self.wall_clock_time.append(t_iter)
+                if verbose:
                     if validate:
                         print(
                             "%02i %s --%s t_iter=%.2f"
@@ -443,22 +443,22 @@ class RecurrentSpikingModel(nn.Module):
                             "%02i %s t_iter=%.2f"
                             % (ep, self.get_metrics_string(ret_train), t_iter)
                         )
-                    if logger != None:
-                        if validate:
-                            logger.info(
-                                "%02i %s --%s t_iter=%.2f"
-                                % (
-                                    ep,
-                                    self.get_metrics_string(ret_train),
-                                    self.get_metrics_string(ret_valid, prefix="val_"),
-                                    t_iter,
-                                )
+                if logger != None:
+                    if validate:
+                        logger.info(
+                            "%02i %s --%s t_iter=%.2f"
+                            % (
+                                ep,
+                                self.get_metrics_string(ret_train),
+                                self.get_metrics_string(ret_valid, prefix="val_"),
+                                t_iter,
                             )
-                        else:
-                            logger.info(
-                                "%02i %s t_iter=%.2f"
-                                % (ep, self.get_metrics_string(ret_train), t_iter)
-                            )
+                        )
+                    else:
+                        logger.info(
+                            "%02i %s t_iter=%.2f"
+                            % (ep, self.get_metrics_string(ret_train), t_iter)
+                        )
 
         self.hist = np.array(self.hist_train)
 
