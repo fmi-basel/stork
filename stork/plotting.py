@@ -133,11 +133,164 @@ def plot_activity_over_trials(
     if not nolabel:
         ax.set_ylabel("Trial idx")
         ax.set_xlabel("Time (ms)")
-    ax.set_xlim(-1, model.nb_time_steps)
-    ax.set_ylim(-1, nb_trials)
+    ax.set_xlim(-3, model.nb_time_steps + 3)
+    ax.set_ylim(-3, nb_trials + 3)
     ax.set_xticks([0, model.nb_time_steps])
     ax.set_yticks([0, nb_trials - 1])
     sns.despine()
+
+
+def plot_activity(
+    model,
+    data,
+    nb_samples=2,
+    figsize=(5, 5),
+    dpi=250,
+    marker=".",
+    point_size=5,
+    point_alpha=1,
+    pal=sns.color_palette("muted", n_colors=20),
+    bg_col="#AAAAAA",
+    bg_col2="#DDDDDD",
+    double=False,
+    pos=(0, 0),
+    off=(0, -0.05),
+):
+    # Run model once and get activities
+    scores = model.evaluate(data, one_batch=True).tolist()
+
+    inp = model.input_group.get_flattened_out_sequence().detach().cpu().numpy()
+    hidden_groups = model.groups[1:-1]
+    hid_activity = [
+        g.get_flattened_out_sequence().detach().cpu().numpy() for g in hidden_groups
+    ]
+    out_group = model.out.detach().cpu().numpy()
+
+    n = model.nb_inputs
+    m = out_group.shape[-1]
+    if double:
+        n = n // 2
+        m = m // 2
+
+    if double:
+        inp1 = inp[:, :, :n]
+        inp2 = inp[:, :, n:]
+        inps = [inp1, inp2]
+    else:
+        inps = [inp]
+
+    nb_groups = len(hidden_groups)
+    nb_total_units = np.sum([g.nb_units for g in hidden_groups])
+    hr = [1] + [4 * g.nb_units / nb_total_units for g in hidden_groups] + [1]
+    hr = list(reversed(hr))  # since we are plotting from bottom to top
+
+    fig, ax = plt.subplots(
+        nb_groups + 2,
+        nb_samples,
+        figsize=figsize,
+        dpi=dpi,
+        sharex="row",
+        sharey="row",
+        gridspec_kw={"height_ratios": hr},
+    )
+
+    sns.despine()
+
+    samples = []
+    if double:
+        raise NotImplementedError("Double not implemented yet")
+    else:
+        label = 0
+        while len(samples) < nb_samples:
+            for i in range(len(data)):
+                if data[i][1] == label:
+                    label += 1
+                    samples.append(i)
+                    break
+
+    for i, s in enumerate(samples):
+        # plot and color input spikes
+        label = 0
+        for idx, inp in enumerate(inps):
+            if double:
+                c = pal[i + idx * m]
+            else:
+                c = pal[i]
+
+            ax[-1][i].scatter(
+                np.where(inp[s])[0],
+                np.where(inp[s])[1] + idx * n,
+                s=point_size,
+                marker=marker,
+                color=c,
+                alpha=point_alpha,
+            )
+        ax[-1][i].set_ylim(-3, model.nb_inputs + 3)
+        ax[-1][i].set_xlim(-3, model.nb_time_steps + 3)
+
+        if i != 0:
+            ax[-1][i].set_yticks([])
+            ax[-1][i].spines["left"].set_visible(False)
+            ax[-1][i].spines["right"].set_visible(False)
+            ax[-1][i].spines["top"].set_visible(False)
+
+        # plot hidden layer spikes
+        for g in range(nb_groups):
+            ax[-(2 + g)][i].scatter(
+                np.where(hid_activity[g][s])[0],
+                np.where(hid_activity[g][s])[1],
+                s=point_size / 2,
+                marker=marker,
+                color="k",
+                alpha=point_alpha,
+            )
+
+            ax[-(2 + g)][0].set_ylabel("Hid. " + str(g))
+            # turn off x-axis
+            ax[-(2 + g)][i].set_xticks([])
+            ax[-(2 + g)][i].set_yticks([])
+            ax[-(2 + g)][i].spines["bottom"].set_visible(False)
+            ax[-(2 + g)][i].set_xlim(-3, model.nb_time_steps + 3)
+
+            if i != 0:
+                turn_axis_off(ax[-(2 + g)][i])
+
+        for line_index, ro_line in enumerate(np.transpose(out_group[i])):
+            if double:
+                if line_index == data[0][s][1] or line_index == data[1][s][1] + m:
+                    ax[0][i].plot(ro_line, color=pal[i])
+                else:
+                    if line_index < m:
+                        ax[0][i].plot(ro_line, color=bg_col, zorder=-5, alpha=0.5)
+                    else:
+                        ax[0][i].plot(ro_line, color=bg_col2, zorder=-5, alpha=0.5)
+            else:
+                c = bg_col
+                alpha = 0.5
+                zorder = -5
+                for j, sidx in enumerate(samples):
+                    if line_index == data[sidx][1]:
+                        c = pal[j]
+                        alpha = 1
+                        zorder = 1
+                ax[0][i].plot(ro_line, color=c, zorder=zorder, alpha=alpha)
+
+        ax[-1][i].set_xlabel("Time (ms)")
+        if i != 0:
+            turn_axis_off(ax[0][i])
+
+    ax[0][0].set_xticks([])
+    ax[0][0].spines["bottom"].set_visible(False)
+
+    ax[-1][0].set_ylabel("Input")
+    ax[0][0].set_ylabel("Readout")
+    ax[-1][0].set_yticks([])
+    ax[0][0].set_yticks([])
+
+    duration = round(model.nb_time_steps * model.time_step * 10) / 10
+    ax[-1][0].set_xticks([0, model.nb_time_steps], [0, duration])
+
+    plt.tight_layout()
 
 
 def plot_activity_snapshot(
@@ -153,6 +306,8 @@ def plot_activity_snapshot(
     bg_col="#AAAAAA",
     bg_col2="#DDDDDD",
     double=False,
+    pos=(0, 0),
+    off=(0, -0.05),
 ):
     # Run model once and get activities
     scores = model.evaluate(data, one_batch=True).tolist()
@@ -205,9 +360,10 @@ def plot_activity_snapshot(
                 s=point_size,
                 marker=marker,
                 color=c,
+                alpha=point_alpha,
             )
-        ax[-1][i].set_ylim(-1, model.nb_inputs)
-        ax[-1][i].set_xlim(-1, model.nb_time_steps)
+        ax[-1][i].set_ylim(-3, model.nb_inputs + 3)
+        ax[-1][i].set_xlim(-3, model.nb_time_steps + 3)
         turn_axis_off(ax[-1][i])
 
         # plot hidden layer spikes
@@ -241,8 +397,13 @@ def plot_activity_snapshot(
 
             turn_axis_off(ax[0][i])
 
+    dur_10 = 10e-3 / model.time_step
+    # print(dur_10)
+    add_xscalebar(ax[-1][0], dur_10, label="10ms", pos=pos, off=off, fontsize=8)
+
     ax[-1][0].set_ylabel("Input")
     ax[0][0].set_ylabel("Readout")
+    plt.tight_layout()
 
 
 def plot_activity_snapshot_old(
