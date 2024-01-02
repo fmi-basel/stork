@@ -152,9 +152,9 @@ def plot_activity(
     pal=sns.color_palette("muted", n_colors=20),
     bg_col="#AAAAAA",
     bg_col2="#DDDDDD",
-    double=False,
     pos=(0, 0),
     off=(0, -0.05),
+    labels=[7, 8],
 ):
     # Run model once and get activities
     scores = model.evaluate(data, one_batch=True).tolist()
@@ -167,17 +167,8 @@ def plot_activity(
     out_group = model.out.detach().cpu().numpy()
 
     n = model.nb_inputs
-    m = out_group.shape[-1]
-    if double:
-        n = n // 2
-        m = m // 2
 
-    if double:
-        inp1 = inp[:, :, :n]
-        inp2 = inp[:, :, n:]
-        inps = [inp1, inp2]
-    else:
-        inps = [inp]
+    inps = [inp]
 
     nb_groups = len(hidden_groups)
     nb_total_units = np.sum([g.nb_units for g in hidden_groups])
@@ -197,25 +188,20 @@ def plot_activity(
     sns.despine()
 
     samples = []
-    if double:
-        raise NotImplementedError("Double not implemented yet")
-    else:
-        label = 0
-        while len(samples) < nb_samples:
-            for i in range(len(data)):
-                if data[i][1] == label:
-                    label += 1
-                    samples.append(i)
-                    break
+
+    label_idx = 0
+    while len(samples) < nb_samples:
+        for i in range(len(data)):
+            if data[i][1] == labels[label_idx]:
+                label_idx += 1
+                samples.append(i)
+                break
 
     for i, s in enumerate(samples):
         # plot and color input spikes
-        label = 0
+
         for idx, inp in enumerate(inps):
-            if double:
-                c = pal[i + idx * m]
-            else:
-                c = pal[i]
+            c = pal[i]
 
             ax[-1][i].scatter(
                 np.where(inp[s])[0],
@@ -255,25 +241,17 @@ def plot_activity(
             if i != 0:
                 turn_axis_off(ax[-(2 + g)][i])
 
-        for line_index, ro_line in enumerate(np.transpose(out_group[i])):
-            if double:
-                if line_index == data[0][s][1] or line_index == data[1][s][1] + m:
-                    ax[0][i].plot(ro_line, color=pal[i])
-                else:
-                    if line_index < m:
-                        ax[0][i].plot(ro_line, color=bg_col, zorder=-5, alpha=0.5)
-                    else:
-                        ax[0][i].plot(ro_line, color=bg_col2, zorder=-5, alpha=0.5)
-            else:
-                c = bg_col
-                alpha = 0.5
-                zorder = -5
-                for j, sidx in enumerate(samples):
-                    if line_index == data[sidx][1]:
-                        c = pal[j]
-                        alpha = 1
-                        zorder = 1
-                ax[0][i].plot(ro_line, color=c, zorder=zorder, alpha=alpha)
+        for line_index, ro_line in enumerate(np.transpose(out_group[s])):
+            c = bg_col
+            alpha = 0.5
+            zorder = -5
+
+            for j, sidx in enumerate(samples):
+                if line_index == data[sidx][1]:
+                    c = pal[j]
+                    alpha = 1
+                    zorder = 1
+            ax[0][i].plot(ro_line, color=c, zorder=zorder, alpha=alpha)
 
         ax[-1][i].set_xlabel("Time (ms)")
         if i != 0:
