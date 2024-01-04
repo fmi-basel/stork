@@ -250,7 +250,8 @@ class RecurrentSpikingModel(nn.Module):
 
         return total_loss
 
-    def evaluate(self, test_dataset, train_mode=False, one_batch=False):
+    def evaluate(self, test_dataset, train_mode=False, one_batch=False, shuffle=False):
+        print("using first evaluate")
         self.train(train_mode)
         self.prepare_data(test_dataset)
         metrics = []
@@ -368,6 +369,8 @@ class RecurrentSpikingModel(nn.Module):
         monitor_spikes=False,
         anneal=False,
     ):
+        print("fitting", nb_epochs, verbose, logging_freq, validate, monitor_spikes, anneal)    
+              
         self.hist_train = []
         if validate:
             self.hist_valid = []
@@ -918,6 +921,7 @@ class DoubleInputRecSpikingModel(RecurrentSpikingModel):
         return np.mean(np.array(metrics), axis=0)
 
     def evaluate(self, dataset, train_mode=False, one_batch=False):
+        print("using second evaluate")
         self.train(train_mode)
         # self.prepare_data(test_dataset)
         metrics = []
