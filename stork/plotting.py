@@ -286,6 +286,7 @@ def plot_activity_snapshot(
     double=False,
     pos=(0, 0),
     off=(0, -0.05),
+    title=False,
 ):
     # Run model once and get activities
     scores = model.evaluate(data, one_batch=True).tolist()
@@ -372,7 +373,8 @@ def plot_activity_snapshot(
                     ax[0][i].plot(ro_line, color=pal[line_index])
                 else:
                     ax[0][i].plot(ro_line, color=bg_col, zorder=-5, alpha=0.5)
-
+            if title:
+                ax[0][i].set_title(data[i][1])
             turn_axis_off(ax[0][i])
 
     dur_10 = 10e-3 / model.time_step
