@@ -250,12 +250,12 @@ class RecurrentSpikingModel(nn.Module):
 
         return total_loss
 
-    def evaluate(self, test_dataset, train_mode=False, one_batch=False, shuffle=False):
+    def evaluate(self, test_dataset, train_mode=False, one_batch=False):
         print("using first evaluate")
         self.train(train_mode)
         self.prepare_data(test_dataset)
         metrics = []
-        for local_X, local_y in self.data_generator(test_dataset, shuffle=False):
+        for local_X, local_y in self.data_generator(test_dataset):
             output = self.forward_pass(local_X, cur_batch_size=len(local_X))
             total_loss = self.get_total_loss(output, local_y)
             # store loss and other metrics
@@ -369,8 +369,16 @@ class RecurrentSpikingModel(nn.Module):
         monitor_spikes=False,
         anneal=False,
     ):
-        print("fitting", nb_epochs, verbose, logging_freq, validate, monitor_spikes, anneal)    
-              
+        print(
+            "fitting",
+            nb_epochs,
+            verbose,
+            logging_freq,
+            validate,
+            monitor_spikes,
+            anneal,
+        )
+
         self.hist_train = []
         if validate:
             self.hist_valid = []
