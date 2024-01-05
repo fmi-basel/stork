@@ -255,7 +255,7 @@ class RecurrentSpikingModel(nn.Module):
         self.train(train_mode)
         self.prepare_data(test_dataset)
         metrics = []
-        for local_X, local_y in self.data_generator(test_dataset):
+        for local_X, local_y in self.data_generator(test_dataset, shuffle=False):
             output = self.forward_pass(local_X, cur_batch_size=len(local_X))
             total_loss = self.get_total_loss(output, local_y)
             # store loss and other metrics
