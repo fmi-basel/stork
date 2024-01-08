@@ -132,7 +132,7 @@ def plot_activity_over_trials(
 
     if not nolabel:
         ax.set_ylabel("Trial idx")
-        ax.set_xlabel("Time (ms)")
+        ax.set_xlabel("Time (s)")
     ax.set_xlim(-3, model.nb_time_steps + 3)
     ax.set_ylim(-3, nb_trials + 3)
     ax.set_xticks([0, model.nb_time_steps])
@@ -253,7 +253,7 @@ def plot_activity(
                     zorder = 1
             ax[0][i].plot(ro_line, color=c, zorder=zorder, alpha=alpha)
 
-        ax[-1][i].set_xlabel("Time (ms)")
+        ax[-1][i].set_xlabel("Time (s)")
         if i != 0:
             turn_axis_off(ax[0][i])
 
