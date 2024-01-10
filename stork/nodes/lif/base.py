@@ -39,6 +39,7 @@ class LIFGroup(CellGroup):
                          name=name, regularizers=regularizers, **kwargs)
         self.tau_mem = tau_mem
         self.tau_syn = tau_syn
+        self.act_fn = activation
         self.spk_nl = activation.apply
         self.diff_reset = diff_reset
         self.learn_timescales = learn_timescales
