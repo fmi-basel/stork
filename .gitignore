@@ -119,6 +119,7 @@ dmypy.json
 
 # VSCode stuff
 *.code-workspace
+.vscode/*
 
 # Datasets
 data/
