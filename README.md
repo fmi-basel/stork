@@ -11,7 +11,7 @@ Furthermore, stork uses per default initialization in the fluctuation-driven reg
 
 If you find this library useful and use it for your research projects, please cite
 
-<a href="https://iopscience.iop.org/article/10.1088/2634-4386/ac97bb">Rossbroich>, J., Gygax, J., and Zenke, F. (2022).  
+<a href="https://iopscience.iop.org/article/10.1088/2634-4386/ac97bb">Rossbroich, J., Gygax, J., and Zenke, F. (2022).  
 Fluctuation-driven initialization for spiking neural network training.  
 Neuromorph. Comput. Eng.  </a>
 
