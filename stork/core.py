@@ -3,7 +3,7 @@ import torch.nn as nn
 
 class NetworkNode(nn.Module):
     def __init__(self, name=None, regularizers=None):
-        """ Initialize base class 
+        """Initialize base class
 
         Args:
             name: A string name for this class used in logs
