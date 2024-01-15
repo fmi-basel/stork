@@ -51,11 +51,17 @@ class RecurrentSpikingModel(nn.Module):
         generator=None,
         time_step=1e-3,
         wandb=None,
+        anneal_interval=0,
+        anneal_step=0,
+        anneal_start=0,
     ):
         self.input_group = input
         self.output_group = output
         self.time_step = time_step
         self.wandb = wandb
+        self.anneal_interval = anneal_interval
+        self.anneal_step = anneal_step
+        self.anneal_start = anneal_start
 
         if loss_stack is not None:
             self.loss_stack = loss_stack
@@ -349,7 +355,15 @@ class RecurrentSpikingModel(nn.Module):
         history = self.get_metrics_history_dict(np.array(self.hist))
         return history
 
-    def fit(self, dataset, nb_epochs=10, verbose=True, shuffle=True, wandb=None):
+    def fit(
+        self,
+        dataset,
+        nb_epochs=10,
+        verbose=True,
+        shuffle=True,
+        wandb=None,
+        anneal=False,
+    ):
         self.hist = []
         self.wall_clock_time = []
         self.train()
@@ -370,9 +384,44 @@ class RecurrentSpikingModel(nn.Module):
                     "%02i %s t_iter=%.2f" % (ep, self.get_metrics_string(ret), t_iter)
                 )
 
+            # when using annealing option
+            if anneal:
+                if ep >= self.anneal_start:
+                    if (ep - self.anneal_start) % self.anneal_interval == 0:
+                        self.anneal_beta
+
         self.fit_runs.append(self.hist)
         history = self.get_metrics_history_dict(np.array(self.hist))
         return history
+
+    def anneal_beta(self):
+        """
+        go through all spiking nonlinearities, change the betas and apply them again. This does not anneal escape noise parameters other than beta.
+        """
+        for g in range(1, len(self.groups) - 1):
+            try:
+                beta = self.groups[g].act_fn.surrogate_params["beta"]
+                print("beta", beta)
+                self.groups[g].act_fn.surrogate_params["beta"] = beta + self.anneal_step
+                if "beta" in self.groups[g].act_fn.escape_noise_params.keys():
+                    ebeta = self.groups[g].act_fn.escape_noise_params["beta"]
+                    print("escape beta", ebeta)
+                    self.groups[g].act_fn.escape_noise_params["beta"] = (
+                        ebeta + self.anneal_step
+                    )
+                self.groups[g].spk_nl = self.groups[g].act_fn.apply
+                print(
+                    "annealed",
+                    self.groups[g].act_fn.surrogate_params,
+                    self.groups[g].act_fn.escape_noise_params,
+                )
+
+            except:
+                beta = self.groups[g].act_fn.beta
+                print("beta", beta)
+                self.groups[g].act_fn.beta = beta + self.anneal_step
+                self.groups[g].spk_nl = self.groups[g].act_fn.apply
+                print("annealed", self.groups[g].act_fn.beta)
 
     def fit_validate(
         self,
@@ -381,21 +430,28 @@ class RecurrentSpikingModel(nn.Module):
         nb_epochs=10,
         verbose=True,
         wandb=None,
-        log_intervall=10,
+        log_interval=10,
+        anneal=False,
     ):
         self.hist_train = []
         self.hist_valid = []
         self.wall_clock_time = []
+
+        # For every epoch
         for ep in range(nb_epochs):
             t_start = time.time()
+
+            # train
             self.train()
             ret_train = self.train_epoch(dataset)
-
             self.train(False)
+
+            # validate
             ret_valid = self.evaluate(valid_dataset)
             self.hist_train.append(ret_train)
             self.hist_valid.append(ret_valid)
 
+            # when using wandb -> log metrics
             if self.wandb is not None:
                 self.wandb.log(
                     {
@@ -408,8 +464,9 @@ class RecurrentSpikingModel(nn.Module):
                     }
                 )
 
+            # print metrics at given interval
             if verbose:
-                if ep % log_intervall == 0:
+                if ep % log_interval == 0:
                     t_iter = time.time() - t_start
                     self.wall_clock_time.append(t_iter)
                     print(
@@ -421,6 +478,12 @@ class RecurrentSpikingModel(nn.Module):
                             t_iter,
                         )
                     )
+
+            # when using annealing option
+            if anneal:
+                if ep >= self.anneal_start:
+                    if (ep - self.anneal_start) % self.anneal_interval == 0:
+                        self.anneal_beta
 
         self.hist = np.concatenate(
             (np.array(self.hist_train), np.array(self.hist_valid))
