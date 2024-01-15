@@ -11,7 +11,9 @@ class InputGroup(CellGroup):
 
     def reset_state(self, batch_size=None):
         super().reset_state(batch_size)
-        self.out = self.states["out"] = torch.zeros(self.int_shape, device=self.device, dtype=self.dtype)
+        self.out = self.states["out"] = torch.zeros(
+            self.int_shape, device=self.device, dtype=self.dtype
+        )
 
     def feed_data(self, data):
         self.local_data = data.reshape((data.shape[:2] + self.shape)).to(self.device)
