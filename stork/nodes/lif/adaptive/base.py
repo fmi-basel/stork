@@ -7,7 +7,7 @@ class AdaptiveLIFGroup(LIFGroup):
     """
     Base class for LIF neurons with adaptive threshold
 
-    Args: 
+    Args:
         shape: The neuron group shape
         tau_ada: The adaptation time constant
         adapt_a: The adaptation strength
@@ -34,8 +34,10 @@ class AdaptiveLIFGroup(LIFGroup):
 
         # synaptic & membrane dynamics
         new_syn = self.dcy_syn * self.syn + self.input
-        new_mem = (self.dcy_mem * self.mem + self.scl_mem *
-                   (self.syn - self.adapt_a * self.ada)) * (1.0 - rst)
+        new_mem = (
+            self.dcy_mem * self.mem
+            + self.scl_mem * (self.syn - self.adapt_a * self.ada)
+        ) * (1.0 - rst)
         new_ada = self.dcy_ada * self.ada + self.out
 
         self.out = self.states["out"] = new_out
