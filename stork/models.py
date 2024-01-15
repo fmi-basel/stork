@@ -251,7 +251,6 @@ class RecurrentSpikingModel(nn.Module):
         return total_loss
 
     def evaluate(self, test_dataset, train_mode=False, one_batch=False):
-        print("using first evaluate")
         self.train(train_mode)
         self.prepare_data(test_dataset)
         metrics = []
@@ -359,30 +358,13 @@ class RecurrentSpikingModel(nn.Module):
     def fit(
         self,
         dataset,
-        valid_dataset=None,
         nb_epochs=10,
         verbose=True,
+        shuffle=True,
         wandb=None,
-        logger=None,
-        logging_freq=50,
-        validate=False,
-        monitor_spikes=False,
         anneal=False,
     ):
-        print(
-            "fitting",
-            nb_epochs,
-            verbose,
-            logging_freq,
-            validate,
-            monitor_spikes,
-            anneal,
-        )
-
-        self.hist_train = []
-        if validate:
-            self.hist_valid = []
-
+        self.hist = []
         self.wall_clock_time = []
 
         if monitor_spikes:
@@ -424,75 +406,58 @@ class RecurrentSpikingModel(nn.Module):
                         )
 
             if self.wandb is not None:
-                if validate:
-                    metrics = self.get_metric_names() + self.get_metric_names(
-                        prefix="val_"
-                    )
-                    values = ret_train.tolist() + ret_valid.tolist()
-                else:
-                    metrics = self.get_metric_names()
-                    values = ret_train.tolist()
+                self.wandb.log(
+                    {key: value for (key, value) in zip(self.get_metric_names(), ret)}
+                )
 
-                self.wandb.log({key: value for (key, value) in zip(metrics, values)})
-
-            if ep % logging_freq == 0:
+            if verbose:
                 t_iter = time.time() - t_start
                 self.wall_clock_time.append(t_iter)
-                if verbose:
-                    if validate:
-                        print(
-                            "%02i %s --%s t_iter=%.2f"
-                            % (
-                                ep,
-                                self.get_metrics_string(ret_train),
-                                self.get_metrics_string(ret_valid, prefix="val_"),
-                                t_iter,
-                            )
-                        )
-                    else:
-                        print(
-                            "%02i %s t_iter=%.2f"
-                            % (ep, self.get_metrics_string(ret_train), t_iter)
-                        )
-                if logger != None:
-                    if validate:
-                        logger.info(
-                            "%02i %s --%s t_iter=%.2f"
-                            % (
-                                ep,
-                                self.get_metrics_string(ret_train),
-                                self.get_metrics_string(ret_valid, prefix="val_"),
-                                t_iter,
-                            )
-                        )
-                    else:
-                        logger.info(
-                            "%02i %s t_iter=%.2f"
-                            % (ep, self.get_metrics_string(ret_train), t_iter)
-                        )
+                print(
+                    "%02i %s t_iter=%.2f" % (ep, self.get_metrics_string(ret), t_iter)
+                )
 
-        self.hist = np.array(self.hist_train)
+            # when using annealing option
+            if anneal:
+                if ep >= self.anneal_start:
+                    if (ep - self.anneal_start) % self.anneal_interval == 0:
+                        self.anneal_beta()
 
-        dict1 = self.get_metrics_history_dict(np.array(self.hist_train), prefix="")
-
-        if not validate:
-            history = {**dict1}
-        else:
-            self.hist = np.concatenate(
-                (np.array(self.hist_train), np.array(self.hist_valid))
-            )
-            dict2 = self.get_metrics_history_dict(
-                np.array(self.hist_valid), prefix="val_"
-            )
-            history = {**dict1, **dict2}
-
-        # what is self.fit_runs?
         self.fit_runs.append(self.hist)
 
         if monitor_spikes:
             return history, np.array(self.hist_ms)
         else:
             return history
+
+    def anneal_beta(self):
+        """
+        go through all spiking nonlinearities, change the betas and apply them again. This does not anneal escape noise parameters other than beta.
+        """
+        for g in range(1, len(self.groups) - 1):
+            try:
+                beta = self.groups[g].act_fn.surrogate_params["beta"]
+                print("beta", beta)
+                self.groups[g].act_fn.surrogate_params["beta"] = beta + self.anneal_step
+                if "beta" in self.groups[g].act_fn.escape_noise_params.keys():
+                    ebeta = self.groups[g].act_fn.escape_noise_params["beta"]
+                    print("escape beta", ebeta)
+                    self.groups[g].act_fn.escape_noise_params["beta"] = (
+                        ebeta + self.anneal_step
+                    )
+                self.groups[g].spk_nl = self.groups[g].act_fn.apply
+                print(
+                    "annealed",
+                    self.groups[g].act_fn.surrogate_params,
+                    self.groups[g].act_fn.escape_noise_params,
+                )
+
+            except:
+                beta = self.groups[g].act_fn.beta
+                print("beta", beta)
+                self.groups[g].act_fn.beta = beta + self.anneal_step
+                self.groups[g].spk_nl = self.groups[g].act_fn.apply
+                print("annealed", self.groups[g].act_fn.beta)
 
     def fit_validate(
         self,
@@ -507,16 +472,22 @@ class RecurrentSpikingModel(nn.Module):
         self.hist_train = []
         self.hist_valid = []
         self.wall_clock_time = []
+
+        # For every epoch
         for ep in range(nb_epochs):
             t_start = time.time()
+
+            # train
             self.train()
             ret_train = self.train_epoch(dataset)
-
             self.train(False)
+
+            # validate
             ret_valid = self.evaluate(valid_dataset)
             self.hist_train.append(ret_train)
             self.hist_valid.append(ret_valid)
 
+            # when using wandb -> log metrics
             if self.wandb is not None:
                 self.wandb.log(
                     {
@@ -529,6 +500,7 @@ class RecurrentSpikingModel(nn.Module):
                     }
                 )
 
+            # print metrics at given interval
             if verbose:
                 if ep % log_interval == 0:
                     t_iter = time.time() - t_start
@@ -542,30 +514,12 @@ class RecurrentSpikingModel(nn.Module):
                             t_iter,
                         )
                     )
+
+            # when using annealing option
             if anneal:
                 if ep >= self.anneal_start:
                     if (ep - self.anneal_start) % self.anneal_interval == 0:
-                        for g in range(1, len(self.groups) - 1):
-                            try:
-                                beta = self.groups[g].act_fn.surrogate_params["beta"]
-                                print("beta", beta)
-                                self.groups[g].act_fn.surrogate_params["beta"] = (
-                                    beta + self.anneal_step
-                                )
-                                self.groups[g].spk_nl = self.groups[g].act_fn.apply
-                                print(
-                                    "annealed",
-                                    self.groups[g].act_fn.surrogate_params["beta"],
-                                )
-                            except:
-                                beta = self.groups[g].act_fn.beta
-                                print("beta", beta)
-                                self.groups[g].act_fn.beta = beta + self.anneal_step
-                                self.groups[g].spk_nl = self.groups[g].act_fn.apply
-                                print("annealed", self.groups[g].act_fn.beta)
-
-            #     if self.anneal_start > ep:
-            #         if ep % self.anneal_interval == 0:
+                        self.anneal_beta()
 
         self.hist = np.concatenate(
             (np.array(self.hist_train), np.array(self.hist_valid))
@@ -609,7 +563,8 @@ class RecurrentSpikingModel(nn.Module):
             pred = []
             for local_X, _ in self.data_generator(data, shuffle=False):
                 data_local = local_X.to(self.device)
-                output = self.forward_pass(data_local, cur_batch_size=len(local_X))
+                output = self.forward_pass(
+                    data_local, cur_batch_size=len(local_X))
                 pred.append(self.loss_stack.predict(output).detach().cpu())
             return torch.cat(pred, dim=0)
 
@@ -702,6 +657,7 @@ class RecurrentSpikingModel(nn.Module):
             test_dataset: Testing data
             nb_repeats: Number of repeats to retrain the model (default=5)
             nb_epochs: Train for x epochs (default=20)
+            callbacks: A list with callbacks (functions which will be called as f(self) whose return value
             callbacks: A list with callbacks (functions which will be called as f(self) whose return value
                        is stored in a list and returned as third return value
 
@@ -929,7 +885,6 @@ class DoubleInputRecSpikingModel(RecurrentSpikingModel):
         return np.mean(np.array(metrics), axis=0)
 
     def evaluate(self, dataset, train_mode=False, one_batch=False):
-        print("using second evaluate")
         self.train(train_mode)
         # self.prepare_data(test_dataset)
         metrics = []

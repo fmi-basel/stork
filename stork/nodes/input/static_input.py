@@ -4,7 +4,7 @@ from stork.nodes.input.base import InputGroup
 class StaticInputGroup(InputGroup):
     """A special group which is used to supply batched dense tensor input to the network via its feed_data function."""
 
-    def __init__(self, shape, scale=1.0, name="Input"):
+    def __init__(self, shape, scale=1, name="Input"):
         super(StaticInputGroup, self).__init__(shape, name=name)
         self.scale = scale
 

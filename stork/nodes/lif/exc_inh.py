@@ -5,8 +5,16 @@ from stork.nodes.base import CellGroup
 
 
 class ExcInhLIFGroup(CellGroup):
-    def __init__(self, shape, tau_mem=10e-3, tau_exc=5e-3, tau_inh=5e-3, sigma_tau=0.0,
-                 activation=activations.SuperSpike, **kwargs):
+    def __init__(
+        self,
+        shape,
+        tau_mem=10e-3,
+        tau_exc=5e-3,
+        tau_inh=5e-3,
+        sigma_tau=0.0,
+        activation=activations.SuperSpike,
+        **kwargs
+    ):
         super(ExcInhLIFGroup, self).__init__(shape, **kwargs)
         self.spk_nl = activation.apply
         self.tau_mem = tau_mem
@@ -30,8 +38,12 @@ class ExcInhLIFGroup(CellGroup):
         tau_inh = torch.tensor(self.tau_inh, dtype=dtype).to(device)
         if self.sigma_tau:
             tau_mem, tau_exc, tau_inh = [
-                tau * torch.exp(self.sigma_tau * torch.randn(self.shape, dtype=dtype).to(device)) for tau in
-                [tau_mem, tau_exc, tau_inh]]
+                tau
+                * torch.exp(
+                    self.sigma_tau * torch.randn(self.shape, dtype=dtype).to(device)
+                )
+                for tau in [tau_mem, tau_exc, tau_inh]
+            ]
         self.dcy_mem = torch.exp(-time_step / tau_mem)
         self.dcy_exc = torch.exp(-time_step / tau_exc)
         self.dcy_inh = torch.exp(-time_step / tau_inh)
@@ -65,8 +77,9 @@ class ExcInhLIFGroup(CellGroup):
         new_syni = self.dcy_inh * self.syni + self.inh
         net_input_current = self.syne - self.syni
         self.set_state_tensor("net_input_current", net_input_current)
-        new_mem = (self.dcy_mem * self.mem + self.scl_mem *
-                   (net_input_current)) * (1.0 - rst)
+        new_mem = (self.dcy_mem * self.mem + self.scl_mem * (net_input_current)) * (
+            1.0 - rst
+        )
 
         self.out = self.states["out"] = new_out
         self.mem = self.states["mem"] = new_mem
@@ -75,7 +88,17 @@ class ExcInhLIFGroup(CellGroup):
 
 
 class ExcInhAdaptiveLIFGroup(CellGroup):
-    def __init__(self, shape, tau_mem=10e-3, tau_exc=5e-3, tau_inh=5e-3, tau_adapt=100e-3, adapt_a=0.5, sigma_tau=0.0, **kwargs):
+    def __init__(
+        self,
+        shape,
+        tau_mem=10e-3,
+        tau_exc=5e-3,
+        tau_inh=5e-3,
+        tau_adapt=100e-3,
+        adapt_a=0.5,
+        sigma_tau=0.0,
+        **kwargs
+    ):
         super(ExcInhAdaptiveLIFGroup, self).__init__(shape, **kwargs)
         self.spk_nl = activations.SuperSpike.apply
         self.tau_mem = tau_mem
@@ -103,8 +126,12 @@ class ExcInhAdaptiveLIFGroup(CellGroup):
         tau_ada = torch.tensor(self.tau_ada, dtype=dtype).to(device)
         if self.sigma_tau:
             tau_mem, tau_exc, tau_inh, tau_ada = [
-                tau * torch.exp(self.sigma_tau * torch.randn(self.shape, dtype=dtype).to(device)) for tau in
-                [tau_mem, tau_exc, tau_inh, tau_ada]]
+                tau
+                * torch.exp(
+                    self.sigma_tau * torch.randn(self.shape, dtype=dtype).to(device)
+                )
+                for tau in [tau_mem, tau_exc, tau_inh, tau_ada]
+            ]
         self.dcy_mem = torch.exp(-time_step / tau_mem)
         self.dcy_exc = torch.exp(-time_step / tau_exc)
         self.dcy_inh = torch.exp(-time_step / tau_inh)
@@ -142,8 +169,10 @@ class ExcInhAdaptiveLIFGroup(CellGroup):
         net_input_current = self.syne - self.syni
         new_ada = self.dcy_ada * self.ada + self.out
         self.set_state_tensor("net_input_current", net_input_current)
-        new_mem = (self.dcy_mem * self.mem + self.scl_mem *
-                   (net_input_current - self.adapt_a * self.ada)) * (1.0 - rst)
+        new_mem = (
+            self.dcy_mem * self.mem
+            + self.scl_mem * (net_input_current - self.adapt_a * self.ada)
+        ) * (1.0 - rst)
 
         self.out = self.states["out"] = new_out
         self.mem = self.states["mem"] = new_mem
@@ -153,7 +182,16 @@ class ExcInhAdaptiveLIFGroup(CellGroup):
 
 
 class Exc2InhLIFGroup(CellGroup):
-    def __init__(self, shape, tau_mem=10e-3, tau_ampa=5e-3, tau_nmda=100e-3, tau_gaba=10e-3, sigma_tau=0.0, **kwargs):
+    def __init__(
+        self,
+        shape,
+        tau_mem=10e-3,
+        tau_ampa=5e-3,
+        tau_nmda=100e-3,
+        tau_gaba=10e-3,
+        sigma_tau=0.0,
+        **kwargs
+    ):
         super(Exc2InhLIFGroup, self).__init__(shape, **kwargs)
         self.spk_nl = activations.SuperSpike.apply
         self.tau_mem = tau_mem
@@ -180,8 +218,12 @@ class Exc2InhLIFGroup(CellGroup):
         tau_gaba = torch.tensor(self.tau_gaba, dtype=dtype).to(device)
         if self.sigma_tau:
             tau_mem, tau_ampa, tau_nmda, tau_gaba = [
-                tau * torch.exp(self.sigma_tau * torch.randn(self.shape, dtype=dtype).to(device)) for tau in
-                [tau_mem, tau_ampa, tau_nmda, tau_gaba]]
+                tau
+                * torch.exp(
+                    self.sigma_tau * torch.randn(self.shape, dtype=dtype).to(device)
+                )
+                for tau in [tau_mem, tau_ampa, tau_nmda, tau_gaba]
+            ]
         self.dcy_mem = torch.exp(-time_step / tau_mem)
         self.dcy_ampa = torch.exp(-time_step / tau_ampa)
         self.dcy_nmda = torch.exp(-time_step / tau_nmda)
@@ -196,7 +238,8 @@ class Exc2InhLIFGroup(CellGroup):
         self.exc = self.get_state_tensor("exc")
         self.inh = self.get_state_tensor("inh")
         self.net_input_current = self.get_state_tensor(
-            "net_input_current", state=torch.zeros_like(self.inh))
+            "net_input_current", state=torch.zeros_like(self.inh)
+        )
 
     def reset_state(self, batch_size=None):
         super().reset_state(batch_size)
@@ -218,11 +261,12 @@ class Exc2InhLIFGroup(CellGroup):
         # synaptic & membrane dynamics
         new_ampa = self.dcy_ampa * self.ampa + self.exc
         new_gaba = self.dcy_gaba * self.gaba + self.inh
-        new_nmda = self.dcy_nmda * self.nmda + self.scl_nmda*self.ampa
-        net_input_current = (self.ampa+self.nmda)/2 - self.gaba
+        new_nmda = self.dcy_nmda * self.nmda + self.scl_nmda * self.ampa
+        net_input_current = (self.ampa + self.nmda) / 2 - self.gaba
         self.set_state_tensor("net_input_current", net_input_current)
-        new_mem = (self.dcy_mem * self.mem + self.scl_mem *
-                   (net_input_current)) * (1.0 - rst)
+        new_mem = (self.dcy_mem * self.mem + self.scl_mem * (net_input_current)) * (
+            1.0 - rst
+        )
 
         self.out = self.states["out"] = new_out
         self.mem = self.states["mem"] = new_mem
