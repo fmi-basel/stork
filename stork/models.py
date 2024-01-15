@@ -366,44 +366,11 @@ class RecurrentSpikingModel(nn.Module):
     ):
         self.hist = []
         self.wall_clock_time = []
-
-        if monitor_spikes:
-            self.hist_ms = {}
-
+        self.train()
         for ep in range(nb_epochs):
             t_start = time.time()
-            self.train()
-            ret_train = self.train_epoch(dataset)
-            self.hist_train.append(ret_train)
-
-            if validate:
-                self.train(False)
-                ret_valid = self.evaluate(valid_dataset)
-                self.hist_valid.append(ret_valid)
-            if monitor_spikes:
-                self.train(False)
-                in_group = self.input_group.get_flattened_out_sequence().detach().cpu()
-                hid_groups = [
-                    g.get_flattened_out_sequence().detach().cpu()
-                    for g in self.groups[1:]
-                ]
-
-                if ep == 0:
-                    self.hist_ms["in_spks"] = [
-                        torch.mean(torch.sum(in_group, dim=1)).item()
-                    ]
-                    for gi, g in enumerate(hid_groups):
-                        self.hist_ms["hid_{}_spks".format(gi)] = [
-                            torch.mean(torch.sum(g, dim=1)).item()
-                        ]
-                else:
-                    self.hist_ms["in_spks"].append(
-                        torch.mean(torch.sum(in_group, dim=1)).item()
-                    )
-                    for gi, g in enumerate(hid_groups):
-                        self.hist_ms["hid_{}_spks".format(gi)].append(
-                            torch.mean(torch.sum(g, dim=1)).item()
-                        )
+            ret = self.train_epoch(dataset, shuffle=shuffle)
+            self.hist.append(ret)
 
             if self.wandb is not None:
                 self.wandb.log(
@@ -424,11 +391,8 @@ class RecurrentSpikingModel(nn.Module):
                         self.anneal_beta()
 
         self.fit_runs.append(self.hist)
-
-        if monitor_spikes:
-            return history, np.array(self.hist_ms)
-        else:
-            return history
+        history = self.get_metrics_history_dict(np.array(self.hist))
+        return history
 
     def anneal_beta(self):
         """
@@ -563,8 +527,7 @@ class RecurrentSpikingModel(nn.Module):
             pred = []
             for local_X, _ in self.data_generator(data, shuffle=False):
                 data_local = local_X.to(self.device)
-                output = self.forward_pass(
-                    data_local, cur_batch_size=len(local_X))
+                output = self.forward_pass(data_local, cur_batch_size=len(local_X))
                 pred.append(self.loss_stack.predict(output).detach().cpu())
             return torch.cat(pred, dim=0)
 
@@ -657,7 +620,6 @@ class RecurrentSpikingModel(nn.Module):
             test_dataset: Testing data
             nb_repeats: Number of repeats to retrain the model (default=5)
             nb_epochs: Train for x epochs (default=20)
-            callbacks: A list with callbacks (functions which will be called as f(self) whose return value
             callbacks: A list with callbacks (functions which will be called as f(self) whose return value
                        is stored in a list and returned as third return value
 
