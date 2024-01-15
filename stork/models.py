@@ -532,6 +532,7 @@ class RecurrentSpikingModel(nn.Module):
                     self.groups[g].act_fn.surrogate_params,
                     self.groups[g].act_fn.escape_noise_params,
                 )
+                self.wandb.log({"beta": beta, "noise beta": ebeta})
 
             except:
                 beta = self.groups[g].act_fn.beta
@@ -539,6 +540,7 @@ class RecurrentSpikingModel(nn.Module):
                 self.groups[g].act_fn.beta = beta + self.anneal_step
                 self.groups[g].spk_nl = self.groups[g].act_fn.apply
                 print("annealed", self.groups[g].act_fn.beta)
+                self.wandb.log({"beta": beta})
 
     def fit_validate(
         self,
@@ -546,7 +548,6 @@ class RecurrentSpikingModel(nn.Module):
         valid_dataset,
         nb_epochs=10,
         verbose=True,
-        wandb=None,
         log_interval=10,
         anneal=False,
     ):
