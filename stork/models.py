@@ -358,31 +358,130 @@ class RecurrentSpikingModel(nn.Module):
     def fit(
         self,
         dataset,
+        valid_dataset=None,
         nb_epochs=10,
         verbose=True,
-        shuffle=True,
         wandb=None,
+        logger=None,
+        logging_freq=50,
+        monitor_spikes=False,
         anneal=False,
     ):
-        self.hist = []
+        if valid_dataset is not None:
+            validate = True
+        print(
+            "fitting",
+            nb_epochs,
+            verbose,
+            logging_freq,
+            validate,
+            monitor_spikes,
+            anneal,
+        )
+
+        self.hist_train = []
+        if validate:
+            self.hist_valid = []
+
         self.wall_clock_time = []
-        self.train()
+
+        if monitor_spikes:
+            self.hist_ms = {}
+
+        # For every epoch
         for ep in range(nb_epochs):
             t_start = time.time()
-            ret = self.train_epoch(dataset, shuffle=shuffle)
-            self.hist.append(ret)
 
+            # train
+            self.train()
+            ret_train = self.train_epoch(dataset)
+            self.train(False)
+
+            self.hist_train.append(ret_train)
+
+            # validate
+            if validate:
+                ret_valid = self.evaluate(valid_dataset)
+                self.hist_valid.append(ret_valid)
+
+            # monitoring spike counts
+            if monitor_spikes:
+                self.train(False)
+                in_group = self.input_group.get_flattened_out_sequence().detach().cpu()
+                hid_groups = [
+                    g.get_flattened_out_sequence().detach().cpu()
+                    for g in self.groups[1:]
+                ]
+
+                if ep == 0:
+                    self.hist_ms["in_spks"] = [
+                        torch.mean(torch.sum(in_group, dim=1)).item()
+                    ]
+                    for gi, g in enumerate(hid_groups):
+                        self.hist_ms["hid_{}_spks".format(gi)] = [
+                            torch.mean(torch.sum(g, dim=1)).item()
+                        ]
+                else:
+                    self.hist_ms["in_spks"].append(
+                        torch.mean(torch.sum(in_group, dim=1)).item()
+                    )
+                    for gi, g in enumerate(hid_groups):
+                        self.hist_ms["hid_{}_spks".format(gi)].append(
+                            torch.mean(torch.sum(g, dim=1)).item()
+                        )
+
+            # measure time of iteration
+            t_iter = time.time() - t_start
+
+            # when using wandb -> log metrics
             if self.wandb is not None:
-                self.wandb.log(
-                    {key: value for (key, value) in zip(self.get_metric_names(), ret)}
-                )
+                if validate:
+                    metrics = self.get_metric_names() + self.get_metric_names(
+                        prefix="val_"
+                    )
+                    values = ret_train.tolist() + ret_valid.tolist()
+                else:
+                    metrics = self.get_metric_names()
+                    values = ret_train.tolist()
+
+                self.wandb.log({key: value for (key, value) in zip(metrics, values)})
+
+            # if there is a logger, log at every epoch
+            if logger != None:
+                if validate:
+                    logger.info(
+                        "%02i %s --%s t_iter=%.2f"
+                        % (
+                            ep,
+                            self.get_metrics_string(ret_train),
+                            self.get_metrics_string(ret_valid, prefix="val_"),
+                            t_iter,
+                        )
+                    )
+                else:
+                    logger.info(
+                        "%02i %s t_iter=%.2f"
+                        % (ep, self.get_metrics_string(ret_train), t_iter)
+                    )
 
             if verbose:
-                t_iter = time.time() - t_start
-                self.wall_clock_time.append(t_iter)
-                print(
-                    "%02i %s t_iter=%.2f" % (ep, self.get_metrics_string(ret), t_iter)
-                )
+                if ep % logging_freq == 0:
+                    self.wall_clock_time.append(t_iter)
+                    if validate:
+                        print(
+                            "%02i %s --%s t_iter=%.2f"
+                            % (
+                                ep,
+                                self.get_metrics_string(ret_train),
+                                self.get_metrics_string(ret_valid, prefix="val_"),
+                                t_iter,
+                            )
+                        )
+                    else:
+                        print(
+                            "%02i %s t_iter=%.2f"
+                            % (ep, self.get_metrics_string(ret_train), t_iter)
+                        )
 
             # when using annealing option
             if anneal:
@@ -390,9 +489,27 @@ class RecurrentSpikingModel(nn.Module):
                     if (ep - self.anneal_start) % self.anneal_interval == 0:
                         self.anneal_beta()
 
+        self.hist = np.array(self.hist_train)
+        dict1 = self.get_metrics_history_dict(np.array(self.hist_train), prefix="")
+
+        if not validate:
+            history = {**dict1}
+        else:
+            self.hist = np.concatenate(
+                (np.array(self.hist_train), np.array(self.hist_valid))
+            )
+            dict2 = self.get_metrics_history_dict(
+                np.array(self.hist_valid), prefix="val_"
+            )
+            history = {**dict1, **dict2}
+
+        # what is self.fit_runs?
         self.fit_runs.append(self.hist)
-        history = self.get_metrics_history_dict(np.array(self.hist))
-        return history
+
+        if monitor_spikes:
+            return history, np.array(self.hist_ms)
+        else:
+            return history
 
     def anneal_beta(self):
         """
