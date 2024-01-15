@@ -388,7 +388,7 @@ class RecurrentSpikingModel(nn.Module):
             if anneal:
                 if ep >= self.anneal_start:
                     if (ep - self.anneal_start) % self.anneal_interval == 0:
-                        self.anneal_beta
+                        self.anneal_beta()
 
         self.fit_runs.append(self.hist)
         history = self.get_metrics_history_dict(np.array(self.hist))
@@ -483,7 +483,7 @@ class RecurrentSpikingModel(nn.Module):
             if anneal:
                 if ep >= self.anneal_start:
                     if (ep - self.anneal_start) % self.anneal_interval == 0:
-                        self.anneal_beta
+                        self.anneal_beta()
 
         self.hist = np.concatenate(
             (np.array(self.hist_train), np.array(self.hist_valid))
