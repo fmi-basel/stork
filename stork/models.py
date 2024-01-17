@@ -333,7 +333,7 @@ class RecurrentSpikingModel(nn.Module):
         history = {name: metrics_array[:, k] for k, name in enumerate(names)}
         return history
 
-    def prime(self, dataset, nb_epochs=10, verbose=True, wandb=None):
+    def prime(self, dataset, nb_epochs=10, verbose=True, wandb=None, offset=0):
         self.hist = []
         for ep in range(nb_epochs):
             t_start = time.time()
@@ -342,7 +342,8 @@ class RecurrentSpikingModel(nn.Module):
 
             if self.wandb is not None:
                 self.wandb.log(
-                    {key: value for (key, value) in zip(self.get_metric_names(), ret)}
+                    {key: value for (key, value) in zip(self.get_metric_names(), ret)},
+                    step=ep + offset + 2,
                 )
 
             if verbose:
@@ -361,11 +362,11 @@ class RecurrentSpikingModel(nn.Module):
         valid_dataset=None,
         nb_epochs=10,
         verbose=True,
-        wandb=None,
         logger=None,
         logging_freq=50,
         monitor_spikes=False,
         anneal=False,
+        offset=0,
     ):
         if valid_dataset is not None:
             validate = True
@@ -410,8 +411,26 @@ class RecurrentSpikingModel(nn.Module):
                 in_group = self.input_group.get_flattened_out_sequence().detach().cpu()
                 hid_groups = [
                     g.get_flattened_out_sequence().detach().cpu()
-                    for g in self.groups[1:]
+                    for g in self.groups[1:-1]
                 ]
+
+                if self.wandb is not None:
+                    self.wandb.log(
+                        {
+                            "in_pop_spk_cnt": torch.mean(
+                                torch.sum(in_group, dim=[1, 2])
+                            ).item()
+                        },
+                        step=ep + offset + 2,
+                    )
+                    self.wandb.log(
+                        {
+                            "hid_pop_spk_cnt_"
+                            + str(j): torch.mean(torch.sum(g, dim=[1, 2])).item()
+                            for j, g in enumerate(hid_groups)
+                        },
+                        step=ep + offset + 2,
+                    )
 
                 if ep == 0:
                     self.hist_ms["in_spks"] = [
@@ -444,7 +463,10 @@ class RecurrentSpikingModel(nn.Module):
                     metrics = self.get_metric_names()
                     values = ret_train.tolist()
 
-                self.wandb.log({key: value for (key, value) in zip(metrics, values)})
+                self.wandb.log(
+                    {key: value for (key, value) in zip(metrics, values)},
+                    step=ep + offset + 2,
+                )
 
             # if there is a logger, log at every epoch
             if logger != None:
@@ -485,9 +507,10 @@ class RecurrentSpikingModel(nn.Module):
 
             # when using annealing option
             if anneal:
-                if ep >= self.anneal_start:
-                    if (ep - self.anneal_start) % self.anneal_interval == 0:
-                        self.anneal_beta()
+                # TODO: check wheter the offset is correctly used
+                if (ep + offset) >= self.anneal_start:
+                    if (ep + offset - self.anneal_start) % self.anneal_interval == 0:
+                        self.anneal_beta(ep)
 
         self.hist = np.array(self.hist_train)
         dict1 = self.get_metrics_history_dict(np.array(self.hist_train), prefix="")
@@ -506,12 +529,12 @@ class RecurrentSpikingModel(nn.Module):
         # what is self.fit_runs?
         self.fit_runs.append(self.hist)
 
-        if monitor_spikes:
-            return history, np.array(self.hist_ms)
-        else:
-            return history
+        # if monitor_spikes:
+        #     return history, np.array(self.hist_ms)
+        # else:
+        return history
 
-    def anneal_beta(self):
+    def anneal_beta(self, ep, offset=0):
         """
         go through all spiking nonlinearities, change the betas and apply them again. This does not anneal escape noise parameters other than beta.
         """
@@ -532,15 +555,18 @@ class RecurrentSpikingModel(nn.Module):
                     self.groups[g].act_fn.surrogate_params,
                     self.groups[g].act_fn.escape_noise_params,
                 )
-                self.wandb.log({"beta": beta, "noise beta": ebeta})
+                self.wandb.log(
+                    {"beta": beta, "noise beta": ebeta}, step=ep + offset + 2
+                )
 
-            except:
+            except Exception as e:
+                print(e)
                 beta = self.groups[g].act_fn.beta
                 print("beta", beta)
                 self.groups[g].act_fn.beta = beta + self.anneal_step
                 self.groups[g].spk_nl = self.groups[g].act_fn.apply
                 print("annealed", self.groups[g].act_fn.beta)
-                self.wandb.log({"beta": beta})
+                self.wandb.log({"beta": beta}, step=ep + offset + 2)
 
     def fit_validate(
         self,
@@ -550,6 +576,7 @@ class RecurrentSpikingModel(nn.Module):
         verbose=True,
         log_interval=10,
         anneal=False,
+        offset=0,
     ):
         self.hist_train = []
         self.hist_valid = []
@@ -579,7 +606,8 @@ class RecurrentSpikingModel(nn.Module):
                             + self.get_metric_names(prefix="val_"),
                             ret_train.tolist() + ret_valid.tolist(),
                         )
-                    }
+                    },
+                    step=ep + offset + 2,
                 )
 
             # print metrics at given interval
@@ -599,9 +627,10 @@ class RecurrentSpikingModel(nn.Module):
 
             # when using annealing option
             if anneal:
-                if ep >= self.anneal_start:
-                    if (ep - self.anneal_start) % self.anneal_interval == 0:
-                        self.anneal_beta()
+                # TOO: check wheter the offset is correctly used
+                if (ep + offset) >= self.anneal_start:
+                    if (ep + offset - self.anneal_start) % self.anneal_interval == 0:
+                        self.anneal_beta(ep)
 
         self.hist = np.concatenate(
             (np.array(self.hist_train), np.array(self.hist_valid))
