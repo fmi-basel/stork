@@ -2,11 +2,14 @@ import torch
 import torch.nn as nn
 
 from torch.nn.parameter import Parameter
+import torch.nn.functional as F
 
 import numpy as np
 
 from . import core
 from . import constraints as stork_constraints
+
+from . import operations
 
 
 class BaseConnection(core.NetworkNode):
@@ -62,7 +65,7 @@ class Connection(BaseConnection):
         self,
         src,
         dst,
-        operation=nn.Linear,
+        operation=None,
         target=None,
         bias=False,
         requires_grad=True,
@@ -71,6 +74,8 @@ class Connection(BaseConnection):
         name=None,
         regularizers=None,
         constraints=None,
+        enable_delays=False,
+        learn_delays=False,
         **kwargs
     ):
         super(Connection, self).__init__(
@@ -85,16 +90,33 @@ class Connection(BaseConnection):
         self.requires_grad = requires_grad
         self.propagate_gradients = propagate_gradients
         self.flatten_input = flatten_input
+        self.enable_delays = enable_delays
+        self.learn_delays = learn_delays
 
         if flatten_input:
-            self.op = operation(src.nb_units, dst.shape[0], bias=bias, **kwargs)
+            src_shape = src.nb_units
         else:
-            self.op = operation(src.shape[0], dst.shape[0], bias=bias, **kwargs)
+            src_shape = src.shape[0]
+
+        if self.enable_delays:
+            self.delays = Parameter(
+                torch.zeros(src_shape, dst.nb_units), requires_grad=learn_delays
+            )
+            if operation is None:
+                operation = operations.MaskedLinear
+        else:
+            if operation is None:
+                operation = nn.Linear
+            self.delays = None
+
+        self.op = operation(src_shape, dst.shape[0], bias=bias, **kwargs)
         for param in self.op.parameters():
             param.requires_grad = requires_grad
 
     def configure(self, batch_size, nb_steps, time_step, device, dtype):
         super().configure(batch_size, nb_steps, time_step, device, dtype)
+        
+        self.prebatch_hook()
 
     def add_diagonal_structure(self, width=1.0, ampl=1.0):
         if type(self.op) != nn.Linear:
@@ -108,21 +130,49 @@ class Connection(BaseConnection):
     def get_weights(self):
         return self.op.weight
 
+    def get_delays(self):
+        return self.delays
+
+    def set_delays(self, delays):
+        self.delays = Parameter(delays, requires_grad=self.learn_delays)
+
     def get_regularizer_loss(self):
         reg_loss = torch.tensor(0.0, device=self.device)
         for reg in self.regularizers:
             reg_loss += reg(self.get_weights())
         return reg_loss
 
+    def prebatch_hook(self):
+        # TODO: add batch dimension to count
+        if self.enable_delays:
+            int_delays = (self.delays / self.time_step).long()
+            self.binary_delay_kernel = F.one_hot(int_delays)
+            self.count = torch.zeros_like(self.binary_delay_kernel, device=self.device)
+
+    def apply_delays(self, preact):
+        self.count += preact[:, None, None] * self.binary_delay_kernel
+
+        mask = self.count[:, :, 0].clone()
+        self.count[:, :, 0] = 0
+        self.count = torch.roll(self.count, -1, -1)
+        return mask
+
     def forward(self):
         preact = self.src.out
+        if self.enable_delays:
+            mask = self.apply_delays(preact)
+            preact = torch.ones_like(preact)
+
         if not self.propagate_gradients:
             preact = preact.detach()
         if self.flatten_input:
             shp = preact.shape
             preact = preact.reshape(shp[:1] + (-1,))
 
-        out = self.op(preact)
+        if self.enable_delays:
+            out = self.op(preact, mask)
+        else:
+            out = self.op(preact)
         self.dst.add_to_state(self.target, out)
 
     def propagate(self):
