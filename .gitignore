@@ -122,3 +122,4 @@ dmypy.json
 
 # Datasets
 data/
+examples/playground.ipynb
