@@ -1,5 +1,8 @@
 <img align="right" width=30% src="img/stork_logo_cr.png">
 
+
+# Implementing delays in SNNs
+
 # Stork
 
 Stork is a library designed for the training of spiking neural networks (SNNs). In contrast to conventional deep learning methods, SNNs operate on spikes instead of continuous activation functions, this is why stork extends PyTorch's auto-differentiation capabilities with surrogate gradients (<a href="https://direct.mit.edu/neco/article-abstract/30/6/1514/8378/SuperSpike-Supervised-Learning-in-Multilayer?redirectedFrom=fulltext">Zenke & Ganguli, 2018</a>) to enable the training of SNNs with backpropagation through time (BPTT).  
