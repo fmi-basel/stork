@@ -176,6 +176,10 @@ class RecurrentSpikingModel(nn.Module):
     def apply_constraints(self):
         for c in self.connections:
             c.apply_constraints()
+    
+    def prebatch_hook(self):
+        for o in self.connections + self.groups:
+            o.prebatch_hook()
 
     def propagate_all(self):
         for c in self.connections:
@@ -287,6 +291,8 @@ class RecurrentSpikingModel(nn.Module):
         self.prepare_data(dataset)
         metrics = []
         for local_X, local_y in self.data_generator(dataset, shuffle=shuffle):
+            self.prebatch_hook()
+
             output = self.forward_pass(local_X, cur_batch_size=len(local_X))
             total_loss = self.get_total_loss(output, local_y)
 

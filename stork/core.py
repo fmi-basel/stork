@@ -32,3 +32,7 @@ class NetworkNode(nn.Module):
 
     def remove_regularizers(self):
         self.regularizers = []
+
+    def prebatch_hook(self):
+        pass
+
