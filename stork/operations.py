@@ -3,11 +3,7 @@ from torch.nn.modules import Linear
 from torch.nn import functional as F
 
 
+masked_linear = torch.vmap(F.linear, in_dims=(0, 0, None))
 class MaskedLinear(Linear):
     def forward(self, input, mask=1):
-        # TODO: add bias
-        w = self.weight.unsqueeze(0)
-        mw = w * mask
-        mwT = torch.transpose(mw, 1, 2)
-
-        return input.unsqueeze(1) @ mwT
+        return masked_linear(input, self.weight.unsqueeze(0) * mask, self.bias)

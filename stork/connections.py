@@ -115,7 +115,6 @@ class Connection(BaseConnection):
 
     def configure(self, batch_size, nb_steps, time_step, device, dtype):
         super().configure(batch_size, nb_steps, time_step, device, dtype)
-
         self.prebatch_hook()
 
     def add_diagonal_structure(self, width=1.0, ampl=1.0):
@@ -154,8 +153,8 @@ class Connection(BaseConnection):
     def apply_delays(self, preact):
         self.count += preact.unsqueeze(1).unsqueeze(-1) * self.binary_delay_kernel
 
-        mask = self.count[:, :, :, 0].clone()
-        self.count[:, :, :, 0] = 0
+        mask = self.count[..., 0].clone()
+        self.count[..., 0] = 0
         self.count = torch.roll(self.count, -1, -1)
 
         return mask
