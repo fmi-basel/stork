@@ -102,20 +102,23 @@ class Connection(BaseConnection):
             self.delays = Parameter(
                 torch.zeros(dst.nb_units, src_shape), requires_grad=learn_delays
             )
+            
             if operation is None:
                 operation = operations.MaskedLinear
         else:
             if operation is None:
                 operation = nn.Linear
             self.delays = None
-
+            
+        self.binary_delay_kernel = None
+        self.count = None
+        
         self.op = operation(src_shape, dst.shape[0], bias=bias, **kwargs)
         for param in self.op.parameters():
             param.requires_grad = requires_grad
 
     def configure(self, batch_size, nb_steps, time_step, device, dtype):
         super().configure(batch_size, nb_steps, time_step, device, dtype)
-        self.prebatch_hook()
 
     def add_diagonal_structure(self, width=1.0, ampl=1.0):
         if type(self.op) != nn.Linear:
@@ -141,18 +144,17 @@ class Connection(BaseConnection):
             reg_loss += reg(self.get_weights())
         return reg_loss
 
-    def prebatch_hook(self):
+    def prebatch_hook(self, local_x, local_y):
         if self.enable_delays:
             int_delays = (self.delays / self.time_step).long()
-            self.binary_delay_kernel = F.one_hot(int_delays).unsqueeze(0)
-            self.count = torch.zeros(
-                size=(self.batch_size, *self.binary_delay_kernel.shape[1:]),
+            self.binary_delay_kernel = F.one_hot(int_delays).unsqueeze(0).to(self.device)
+            self.count = torch.empty(
+                size=(local_x.shape[0], *self.binary_delay_kernel.shape[1:]),
                 device=self.device,
             )
 
     def apply_delays(self, preact):
         self.count += preact.unsqueeze(1).unsqueeze(-1) * self.binary_delay_kernel
-
         mask = self.count[..., 0].clone()
         self.count[..., 0] = 0
         self.count = torch.roll(self.count, -1, -1)
