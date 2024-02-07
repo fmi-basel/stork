@@ -177,9 +177,9 @@ class RecurrentSpikingModel(nn.Module):
         for c in self.connections:
             c.apply_constraints()
     
-    def prebatch_hook(self):
+    def prebatch_hook(self, local_x, local_y):
         for o in self.connections + self.groups:
-            o.prebatch_hook()
+            o.prebatch_hook(local_x, local_y)
 
     def propagate_all(self):
         for c in self.connections:
@@ -253,6 +253,7 @@ class RecurrentSpikingModel(nn.Module):
         self.prepare_data(test_dataset)
         metrics = []
         for local_X, local_y in self.data_generator(test_dataset, shuffle=False):
+            self.prebatch_hook(local_X, local_y)
             output = self.forward_pass(local_X, cur_batch_size=len(local_X))
             total_loss = self.get_total_loss(output, local_y)
             # store loss and other metrics
@@ -291,7 +292,7 @@ class RecurrentSpikingModel(nn.Module):
         self.prepare_data(dataset)
         metrics = []
         for local_X, local_y in self.data_generator(dataset, shuffle=shuffle):
-            self.prebatch_hook()
+            self.prebatch_hook(local_X, local_y)
 
             output = self.forward_pass(local_X, cur_batch_size=len(local_X))
             total_loss = self.get_total_loss(output, local_y)
@@ -450,6 +451,7 @@ class RecurrentSpikingModel(nn.Module):
     def predict(self, data, train_mode=False):
         self.train(train_mode)
         if type(data) in [torch.Tensor, np.ndarray]:
+            self.prebatch_hook(data, None)
             output = self.forward_pass(data, cur_batch_size=len(data))
             pred = self.loss_stack.predict(output)
             return pred
@@ -457,6 +459,7 @@ class RecurrentSpikingModel(nn.Module):
             self.prepare_data(data)
             pred = []
             for local_X, _ in self.data_generator(data, shuffle=False):
+                self.prebatch_hook(local_X, None)
                 data_local = local_X.to(self.device)
                 output = self.forward_pass(data_local, cur_batch_size=len(local_X))
                 pred.append(self.loss_stack.predict(output).detach().cpu())
@@ -468,6 +471,7 @@ class RecurrentSpikingModel(nn.Module):
         # Prepare a list for each monitor to hold the batches
         results = [[] for _ in self.monitors]
         for local_X, local_y in self.data_generator(dataset, shuffle=False):
+            self.prebatch_hook(local_X, local_y)
             for m in self.monitors:
                 m.reset()
 
