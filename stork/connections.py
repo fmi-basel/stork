@@ -56,7 +56,7 @@ class BaseConnection(core.NetworkNode):
     def apply_constraints(self):
         raise NotImplementedError
     
-    def reset_state(batchsize):
+    def reset_state(self, batchsize):
         pass
 
 
@@ -123,7 +123,7 @@ class Connection(BaseConnection):
 class SuperConnection(BaseConnection):
     def __init__(self, src, dst, tau_filter=10e-3, nb_filters=5, operation=nn.Linear, target=None, bias=False, requires_grad=True,
                  propagate_gradients=True, flatten_input=False, name=None, regularizers=None, constraints=None, **kwargs):
-        super(Connection, self).__init__(src, dst, name=name,
+        super(SuperConnection, self).__init__(src, dst, name=name,
                                          target=target, regularizers=regularizers, constraints=constraints)
 
         self.requires_grad = requires_grad
@@ -180,14 +180,16 @@ class SuperConnection(BaseConnection):
         preact = self.src.out
         
         # Update filters
+        new_filters = torch.zeros_like(self.filters)
+        
         update = preact
         for filt_idx in range(self.nb_filters):
-            # Potentially consider to scale update by 1 - self.dcy_filter
-            # or just self.time_step
-            self.filters[:,:,filt_idx] = self.dcy_filter * self.filters[:,:,filt_idx] + update
-            update = self.scl_filter * self.filters[:,:,filt_idx]
+            
+            new_filters[:,:,filt_idx] = self.dcy_filter * self.filters[:,:,filt_idx] + update
+            update = self.scl_filter * new_filters[:,:,filt_idx]
         
-        filter_out = self.filters.view(self.batch_size, 
+        self.filters = new_filters
+        filter_out = new_filters.view(self.batch_size, 
                                        self.src_shape * self.nb_filters)
         
         if not self.propagate_gradients:
