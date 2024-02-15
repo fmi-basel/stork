@@ -114,6 +114,11 @@ class Connection(BaseConnection):
     def apply_constraints(self):
         for const in self.constraints:
             const.apply(self.op.weight)
+            
+            
+class SuperConnection(Connection):
+    NotImplemented
+    
 
 
 class IdentityConnection(BaseConnection):
