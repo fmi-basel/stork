@@ -134,6 +134,9 @@ class RecurrentSpikingModel(nn.Module):
     def reset_states(self, batch_size=None):
         for g in self.groups:
             g.reset_state(batch_size)
+            
+        for c in self.connections:
+            c.reset_state(batch_size)
 
     def evolve_all(self):
         for g in self.groups:

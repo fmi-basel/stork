@@ -6,13 +6,19 @@ from stork import activations
 from stork.nodes.base import CellGroup
 
 
-class LIFGroup(CellGroup):
-    def __init__(self, shape, tau_mem=10e-3, tau_syn=5e-3, diff_reset=False, learn_timescales=False, clamp_mem=False,
+class DeltaSynapseLIFGroup(CellGroup):
+    def __init__(self, shape, tau_mem=10e-3, diff_reset=False, learn_timescales=False, clamp_mem=False,
                  activation=activations.SuperSpike, dropout_p=0.0, stateful=False, name="LIFGroup", regularizers=None, **kwargs):
         """
-        Leaky Integrate-and-Fire neuron with decaying synaptic input current.
-        It has three state variables that are scalars and are updated at every time step:
-        `mem` is for the membrane potential, `syn` is for the synaptic input current, and `out` is 0/1 depending on
+        Leaky Integrate-and-Fire neuron without synaptic time constant.
+        Input at each time step is the weighted sum of input spikes.
+        
+        This class should be used in the following cases:
+            - To implement LIF neurons with delta synapses
+            - To implement synapses as filter cascades with the `SuperConnection` class
+        
+        It has two state variables that are scalars and are updated at every time step:
+        `mem` is for the membrane potential, and `out` is 0/1 depending on
         whether the neuron produces a spike.
 
         Args: 
@@ -20,8 +26,6 @@ class LIFGroup(CellGroup):
             :type shape: int or tuple of int
             :param tau_mem: The membrane time constant in s, defaults to 10e-3
             :type tau_mem: float
-            :param tau_syn: The synaptic time constant in s, defaults to 5e-3
-            :type tau_syn: float
             :param diff_reset: Whether or not to differentiate through the reset term, defaults to False
             :type diff_reset: bool
             :param learn_timescales: Whether to learn the membrane and synaptic time constants, defaults to False
@@ -38,7 +42,6 @@ class LIFGroup(CellGroup):
         super().__init__(shape, dropout_p=dropout_p, stateful=stateful,
                          name=name, regularizers=regularizers, **kwargs)
         self.tau_mem = tau_mem
-        self.tau_syn = tau_syn
         self.spk_nl = activation.apply
         self.diff_reset = diff_reset
         self.learn_timescales = learn_timescales
@@ -49,17 +52,11 @@ class LIFGroup(CellGroup):
     def configure(self, batch_size, nb_steps, time_step, device, dtype):
         self.dcy_mem = float(np.exp(-time_step / self.tau_mem))
         self.scl_mem = 1.0 - self.dcy_mem
-        self.dcy_syn = float(np.exp(-time_step / self.tau_syn))
-        self.scl_syn = 1.0 - self.dcy_syn
         if self.learn_timescales:
             mem_param = torch.randn(
                 1, device=device, dtype=dtype, requires_grad=True)
-            syn_param = torch.randn(
-                1, device=device, dtype=dtype, requires_grad=True)
             self.mem_param = Parameter(
                 mem_param, requires_grad=self.learn_timescales)
-            self.syn_param = Parameter(
-                syn_param, requires_grad=self.learn_timescales)
         super().configure(batch_size, nb_steps, time_step, device, dtype)
 
     def reset_state(self, batch_size=None):
@@ -68,11 +65,8 @@ class LIFGroup(CellGroup):
             self.dcy_mem = torch.exp(-self.time_step /
                                      (2 * self.tau_mem * torch.sigmoid(self.mem_param)))
             self.scl_mem = 1.0 - self.dcy_mem
-            self.dcy_syn = torch.exp(-self.time_step /
-                                     (2 * self.tau_syn * torch.sigmoid(self.syn_param)))
-            self.scl_syn = 1.0 - self.dcy_syn
+
         self.mem = self.get_state_tensor("mem", state=self.mem)
-        self.syn = self.get_state_tensor("syn", state=self.syn)
         self.out = self.states["out"] = torch.zeros(
             self.int_shape, device=self.device, dtype=self.dtype)
 
@@ -93,14 +87,12 @@ class LIFGroup(CellGroup):
         new_out, rst = self.get_spike_and_reset(self.mem)
 
         # synaptic & membrane dynamics
-        new_syn = self.dcy_syn * self.syn + self.input
         new_mem = (self.dcy_mem * self.mem + self.scl_mem *
-                   self.syn) * (1.0 - rst)  # multiplicative reset
- 
+                   self.input) * (1.0 - rst)  # multiplicative reset
+
         # Clamp membrane potential
         if self.clamp_mem:
             new_mem = torch.clamp(new_mem, max=1.01)
 
         self.out = self.states["out"] = new_out
         self.mem = self.states["mem"] = new_mem
-        self.syn = self.states["syn"] = new_syn
