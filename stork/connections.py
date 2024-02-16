@@ -147,13 +147,29 @@ class SuperConnection(BaseConnection):
         # State for filters
         self.filters = None
         
+        # Update matrix for filters
+        self.filter_update = None
+        
     def reset_state(self, batchsize):
-        shape = (batchsize, self.src_shape, self.nb_filters)
-        self.filters = torch.zeros(shape, device=self.device, dtype=self.dtype)
+        
+        if self.flatten_input:
+            self.filter_shape = (batchsize, self.src.nb_units, self.nb_filters)
+        else:
+            self.filter_shape = (batchsize, *self.src.shape, self.nb_filters)
+            
+        self.filters = torch.zeros(self.filter_shape, device=self.device, dtype=self.dtype)
 
     def configure(self, batch_size, nb_steps, time_step, device, dtype):
         self.dcy_filter = float(np.exp(-time_step / self.tau_filter))
         self.scl_filter = 1 - self.dcy_filter
+        
+        # Make update matrix
+        upd_shape = (self.nb_filters, self.nb_filters)
+        self.filter_update = torch.zeros(upd_shape, device=device, dtype=dtype)
+        self.filter_update.fill_diagonal_(self.dcy_filter)
+        for i in range(self.nb_filters - 1):
+            self.filter_update[i, i+1] = self.scl_filter
+        
         super().configure(batch_size, nb_steps, time_step, device, dtype)
 
     def add_diagonal_structure(self, width=1.0, ampl=1.0):
@@ -180,16 +196,23 @@ class SuperConnection(BaseConnection):
         preact = self.src.out
         
         # Update filters
-        new_filters = torch.zeros_like(self.filters)
+        new_filters = torch.einsum('bnf,fg->bng', self.filters, self.filter_update)
         
-        update = preact
-        for filt_idx in range(self.nb_filters):
+        # add spiketrain to first filters
+        new_filters[:,:,0] += preact
+        
+        # OLD: UPDATE USING FOR LOOP
+        # # # # # # # # # # # # # # # 
+        
+        #update = preact
+        #for filt_idx in range(self.nb_filters):
             
-            new_filters[:,:,filt_idx] = self.dcy_filter * self.filters[:,:,filt_idx] + update
-            update = self.scl_filter * new_filters[:,:,filt_idx]
+        #    new_filters[:,:,filt_idx] = self.dcy_filter * self.filters[:,:,filt_idx] + update
+        #    update = self.scl_filter * new_filters[:,:,filt_idx]
         
         self.filters = new_filters
-        filter_out = new_filters.view(self.batch_size, 
+                    
+        filter_out = new_filters.view(self.filters.shape[0], 
                                        self.src_shape * self.nb_filters)
         
         if not self.propagate_gradients:
@@ -208,6 +231,7 @@ class SuperConnection(BaseConnection):
     def apply_constraints(self):
         for const in self.constraints:
             const.apply(self.op.weight)
+
 
 class IdentityConnection(BaseConnection):
     def __init__(self, src, dst, target=None, bias=False, requires_grad=True, name=None, regularizers=None, constraints=None, tie_weights=None, weight_scale=1.0):
@@ -273,3 +297,42 @@ class Conv2dConnection(Connection):
     def __init__(self, src, dst, conv=nn.Conv2d, **kwargs):
         super(Conv2dConnection, self).__init__(
             src, dst, operation=conv, **kwargs)
+
+
+class SuperConvConnection(SuperConnection):
+    def __init__(self, src, dst, conv=nn.Conv1d, **kwargs):
+        super(SuperConvConnection, self).__init__(
+            src, dst, operation=conv, **kwargs)
+        
+    def forward(self):
+        
+        preact = self.src.out
+        
+        # Update filters
+        new_filters = torch.einsum('bncf,fg->bncg', self.filters, self.filter_update)
+        
+        # add spiketrain to first filters
+        new_filters[:, :, :, 0] += preact
+
+        self.filters = new_filters
+                    
+        filter_out = new_filters.view(self.filters.shape[0], 
+                                      self.src_shape * self.nb_filters,
+                                      -1)
+        
+        if not self.propagate_gradients:
+            filter_out = filter_out.detach()
+        
+        if self.flatten_input:
+            shp = filter_out.shape
+            filter_out = filter_out.reshape(shp[:1] + (-1,))
+
+        out = self.op(filter_out)
+        self.dst.add_to_state(self.target, out)
+
+    def propagate(self):
+        self.forward()
+
+    def apply_constraints(self):
+        for const in self.constraints:
+            const.apply(self.op.weight)
