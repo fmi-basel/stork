@@ -274,8 +274,48 @@ class SuperConnection(BaseConnection):
     def apply_constraints(self):
         for const in self.constraints:
             const.apply(self.op.weight)
+            
+    def get_filterbanks(self, T=1):
+        """
+        Used to inspect the learned synaptic filters.
+        Returns an object of shape (time, n_pre, n_post)
+        that contains the weighted filterbanks for each connection.
+        
+        If sum_over_filters=False, returns an object of shape (time, n_pre, n_post, n_filters)
+        with each individually weighted filter.
+        """
+        
+        # Prepare empty tensors
+        timesteps = int(T / self.time_step)
+        
+        filter_shape = self.filter_shape[1:]            
+        filter_state = torch.zeros(filter_shape, device=self.device, dtype=self.dtype)
+        output = torch.zeros((timesteps + 1, *filter_shape), device=self.device, dtype=self.dtype)
 
-
+        # Evolve filters over time
+        filter_state[..., 0] = 1
+        output[0] = filter_state
+        
+        for timestep in range(timesteps):
+            
+            # Update filters
+            filter_state = torch.einsum('bf,fg->bg', filter_state, self.filter_update)
+            output[timestep + 1] = filter_state
+        
+        # Weight the filterbanks
+        w = self.op.weight
+        weighted_filters = w.view(1, *w.shape) * output.view(timesteps + 1, 
+                                                             1,
+                                                             self.src_shape * self.nb_filters)
+        
+        weighted_filters = weighted_filters.reshape(timesteps + 1,
+                                                    w.shape[0],
+                                                    self.src_shape,
+                                                    self.nb_filters)
+        
+        return weighted_filters.cpu().detach().numpy()
+    
+        
 class IdentityConnection(BaseConnection):
     def __init__(
         self,
@@ -394,3 +434,41 @@ class SuperConvConnection(SuperConnection):
     def apply_constraints(self):
         for const in self.constraints:
             const.apply(self.op.weight)
+            
+    def get_filterbanks(self, T=1):
+        """
+        Used to inspect the learned synaptic filters.
+        Returns an object of shape (time, n_pre, n_post, n_filters, kernel_size)
+        """
+        
+        # Prepare empty tensors
+        timesteps = int(T / self.time_step)
+        
+        filter_shape = (self.src_shape, self.nb_filters)
+        filter_state = torch.zeros(filter_shape, device=self.device, dtype=self.dtype)
+        output = torch.zeros((timesteps + 1, *filter_shape), device=self.device, dtype=self.dtype)
+
+        # Evolve filters over time
+        filter_state[..., 0] = 1
+        output[0] = filter_state
+        
+        for timestep in range(timesteps):
+            
+            # Update filters
+            filter_state = torch.einsum('nf,fg->ng', filter_state, self.filter_update)
+            output[timestep + 1] = filter_state
+        
+        # Weight the filterbanks
+        w = self.op.weight
+        weighted_filters = w.view(1, *w.shape) * output.view(timesteps + 1, 
+                                                             1,
+                                                             self.src_shape * self.nb_filters,
+                                                             1)
+        
+        weighted_filters = weighted_filters.reshape(timesteps + 1,
+                                                    w.shape[0],
+                                                    self.src_shape,
+                                                    self.nb_filters,
+                                                    -1)
+        
+        return weighted_filters.cpu().detach().numpy()
