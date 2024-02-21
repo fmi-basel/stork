@@ -122,3 +122,6 @@ dmypy.json
 
 # Datasets
 data/
+
+# Wandb tracking
+**/wandb/**
