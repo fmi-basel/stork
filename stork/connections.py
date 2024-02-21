@@ -11,8 +11,10 @@ from . import constraints as stork_constraints
 
 
 class BaseConnection(core.NetworkNode):
-    def __init__(self, src, dst, target=None, name=None, regularizers=None, constraints=None):
-        """ Abstract base class of Connection objects. 
+    def __init__(
+        self, src, dst, target=None, name=None, regularizers=None, constraints=None
+    ):
+        """Abstract base class of Connection objects.
 
         Args:
             src (CellGroup): The source group
@@ -24,8 +26,7 @@ class BaseConnection(core.NetworkNode):
 
         """
 
-        super(BaseConnection, self).__init__(
-            name=name, regularizers=regularizers)
+        super(BaseConnection, self).__init__(name=name, regularizers=regularizers)
         self.src = src
         self.dst = dst
 
@@ -55,27 +56,44 @@ class BaseConnection(core.NetworkNode):
 
     def apply_constraints(self):
         raise NotImplementedError
-    
+
     def reset_state(self, batchsize):
         pass
 
 
 class Connection(BaseConnection):
-    def __init__(self, src, dst, operation=nn.Linear, target=None, bias=False, requires_grad=True,
-                 propagate_gradients=True, flatten_input=False, name=None, regularizers=None, constraints=None, **kwargs):
-        super(Connection, self).__init__(src, dst, name=name,
-                                         target=target, regularizers=regularizers, constraints=constraints)
+    def __init__(
+        self,
+        src,
+        dst,
+        operation=nn.Linear,
+        target=None,
+        bias=False,
+        requires_grad=True,
+        propagate_gradients=True,
+        flatten_input=False,
+        name=None,
+        regularizers=None,
+        constraints=None,
+        **kwargs
+    ):
+        super(Connection, self).__init__(
+            src,
+            dst,
+            name=name,
+            target=target,
+            regularizers=regularizers,
+            constraints=constraints,
+        )
 
         self.requires_grad = requires_grad
         self.propagate_gradients = propagate_gradients
         self.flatten_input = flatten_input
 
         if flatten_input:
-            self.op = operation(
-                src.nb_units, dst.shape[0], bias=bias, **kwargs)
+            self.op = operation(src.nb_units, dst.shape[0], bias=bias, **kwargs)
         else:
-            self.op = operation(
-                src.shape[0], dst.shape[0], bias=bias, **kwargs)
+            self.op = operation(src.shape[0], dst.shape[0], bias=bias, **kwargs)
         for param in self.op.parameters():
             param.requires_grad = requires_grad
 
@@ -84,12 +102,11 @@ class Connection(BaseConnection):
 
     def add_diagonal_structure(self, width=1.0, ampl=1.0):
         if type(self.op) != nn.Linear:
-            raise ValueError(
-                'Expected op to be nn.Linear to add diagonal structure.')
+            raise ValueError("Expected op to be nn.Linear to add diagonal structure.")
         A = np.zeros(self.op.weight.shape)
         x = np.linspace(0, A.shape[0], A.shape[1])
         for i in range(len(A)):
-            A[i] = ampl * np.exp(-(x - i) ** 2 / width ** 2)
+            A[i] = ampl * np.exp(-((x - i) ** 2) / width**2)
         self.op.weight.data += torch.from_numpy(A)
 
     def get_weights(self):
@@ -118,68 +135,93 @@ class Connection(BaseConnection):
     def apply_constraints(self):
         for const in self.constraints:
             const.apply(self.op.weight)
-            
-            
+
+
 class SuperConnection(BaseConnection):
-    def __init__(self, src, dst, tau_filter=10e-3, nb_filters=5, operation=nn.Linear, target=None, bias=False, requires_grad=True,
-                 propagate_gradients=True, flatten_input=False, name=None, regularizers=None, constraints=None, **kwargs):
-        super(SuperConnection, self).__init__(src, dst, name=name,
-                                         target=target, regularizers=regularizers, constraints=constraints)
+    def __init__(
+        self,
+        src,
+        dst,
+        tau_filter=10e-3,
+        nb_filters=5,
+        operation=nn.Linear,
+        target=None,
+        bias=False,
+        requires_grad=True,
+        propagate_gradients=True,
+        flatten_input=False,
+        name=None,
+        regularizers=None,
+        constraints=None,
+        **kwargs
+    ):
+        super(SuperConnection, self).__init__(
+            src,
+            dst,
+            name=name,
+            target=target,
+            regularizers=regularizers,
+            constraints=constraints,
+        )
 
         self.requires_grad = requires_grad
         self.propagate_gradients = propagate_gradients
         self.flatten_input = flatten_input
-        
+
         self.tau_filter = tau_filter
         self.nb_filters = nb_filters
-        
+
         if flatten_input:
             self.src_shape = src.nb_units
         else:
             self.src_shape = src.shape[0]
-        
+
         self.op = operation(
-            self.src_shape * self.nb_filters, dst.shape[0], bias=bias, **kwargs)
-        
+            self.src_shape * self.nb_filters, dst.shape[0], bias=bias, **kwargs
+        )
+
         for param in self.op.parameters():
             param.requires_grad = requires_grad
-            
+
         # State for filters
         self.filters = None
-        
+
         # Update matrix for filters
         self.filter_update = None
-        
+
     def reset_state(self, batchsize):
-        
+
         if self.flatten_input:
             self.filter_shape = (batchsize, self.src.nb_units, self.nb_filters)
         else:
             self.filter_shape = (batchsize, *self.src.shape, self.nb_filters)
-            
-        self.filters = torch.zeros(self.filter_shape, device=self.device, dtype=self.dtype)
+
+        self.filters = torch.zeros(
+            self.filter_shape, device=self.device, dtype=self.dtype
+        )
 
     def configure(self, batch_size, nb_steps, time_step, device, dtype):
         self.dcy_filter = float(np.exp(-time_step / self.tau_filter))
         self.scl_filter = 1 - self.dcy_filter
-        
+
         # Make update matrix
         upd_shape = (self.nb_filters, self.nb_filters)
+        # TODO: should we make filter_update learnable?
         self.filter_update = torch.zeros(upd_shape, device=device, dtype=dtype)
         self.filter_update.fill_diagonal_(self.dcy_filter)
         for i in range(self.nb_filters - 1):
-            self.filter_update[i, i+1] = self.scl_filter
-        
+            self.filter_update[i, i + 1] = self.scl_filter
+
         super().configure(batch_size, nb_steps, time_step, device, dtype)
 
     def add_diagonal_structure(self, width=1.0, ampl=1.0):
         # This needs to be implemented to take into account the
         # filter structure of the weight matrix
-        
+
         # Do we even need this ever?
-        
+
         raise NotImplementedError
-    
+
     def get_weights(self, return_3d=False):
         if return_3d:
             raise NotImplementedError
@@ -189,35 +231,36 @@ class SuperConnection(BaseConnection):
         reg_loss = torch.tensor(0.0, device=self.device)
         for reg in self.regularizers:
             reg_loss += reg(self.get_weights())
-        return reg_loss        
+        return reg_loss
 
     def forward(self):
-        
+
         preact = self.src.out
-        
+
         # Update filters
-        new_filters = torch.einsum('bnf,fg->bng', self.filters, self.filter_update)
-        
+        new_filters = torch.einsum("bnf,fg->bng", self.filters, self.filter_update)
+
         # add spiketrain to first filters
-        new_filters[:,:,0] += preact
-        
+        new_filters[:, :, 0] += preact
+
         # OLD: UPDATE USING FOR LOOP
-        # # # # # # # # # # # # # # # 
-        
-        #update = preact
-        #for filt_idx in range(self.nb_filters):
-            
+        # # # # # # # # # # # # # # #
+
+        # update = preact
+        # for filt_idx in range(self.nb_filters):
+
         #    new_filters[:,:,filt_idx] = self.dcy_filter * self.filters[:,:,filt_idx] + update
         #    update = self.scl_filter * new_filters[:,:,filt_idx]
-        
+
         self.filters = new_filters
-                    
-        filter_out = new_filters.view(self.filters.shape[0], 
-                                       self.src_shape * self.nb_filters)
-        
+
+        filter_out = new_filters.view(
+            self.filters.shape[0], self.src_shape * self.nb_filters
+        )
+
         if not self.propagate_gradients:
             filter_out = filter_out.detach()
-        
+
         if self.flatten_input:
             shp = filter_out.shape
             filter_out = filter_out.reshape(shp[:1] + (-1,))
@@ -234,15 +277,33 @@ class SuperConnection(BaseConnection):
 
 
 class IdentityConnection(BaseConnection):
-    def __init__(self, src, dst, target=None, bias=False, requires_grad=True, name=None, regularizers=None, constraints=None, tie_weights=None, weight_scale=1.0):
-        """ Initialize IdentityConnection
+    def __init__(
+        self,
+        src,
+        dst,
+        target=None,
+        bias=False,
+        requires_grad=True,
+        name=None,
+        regularizers=None,
+        constraints=None,
+        tie_weights=None,
+        weight_scale=1.0,
+    ):
+        """Initialize IdentityConnection
 
         Args:
             tie_weights (list of int, optional): Tie weights along dims given in list
             weight_scale (float, optional): Scale everything by this factor. Useful when the connection is used for relaying currents rather than spikes.
         """
-        super(IdentityConnection, self).__init__(src, dst, name=name,
-                                                 target=target, regularizers=regularizers, constraints=constraints)
+        super(IdentityConnection, self).__init__(
+            src,
+            dst,
+            name=name,
+            target=target,
+            regularizers=regularizers,
+            constraints=constraints,
+        )
 
         self.requires_grad = requires_grad
         self.weight_scale = weight_scale
@@ -255,11 +316,9 @@ class IdentityConnection(BaseConnection):
                 wshp[d] = 1
             wshp = tuple(wshp)
 
-        self.weights = Parameter(torch.randn(
-            wshp), requires_grad=requires_grad)
+        self.weights = Parameter(torch.randn(wshp), requires_grad=requires_grad)
         if bias:
-            self.bias = Parameter(torch.randn(
-                wshp), requires_grad=requires_grad)
+            self.bias = Parameter(torch.randn(wshp), requires_grad=requires_grad)
 
     def get_weights(self):
         return self.weights
@@ -278,10 +337,12 @@ class IdentityConnection(BaseConnection):
         preact = self.src.out
         if self.bias is None:
             self.dst.scale_and_add_to_state(
-                self.weight_scale, self.target, self.weights * preact)
+                self.weight_scale, self.target, self.weights * preact
+            )
         else:
             self.dst.scale_and_add_to_state(
-                self.weight_scale, self.target, self.weights * preact + self.bias)
+                self.weight_scale, self.target, self.weights * preact + self.bias
+            )
 
     def propagate(self):
         self.forward()
@@ -289,40 +350,37 @@ class IdentityConnection(BaseConnection):
 
 class ConvConnection(Connection):
     def __init__(self, src, dst, conv=nn.Conv1d, **kwargs):
-        super(ConvConnection, self).__init__(
-            src, dst, operation=conv, **kwargs)
+        super(ConvConnection, self).__init__(src, dst, operation=conv, **kwargs)
 
 
 class Conv2dConnection(Connection):
     def __init__(self, src, dst, conv=nn.Conv2d, **kwargs):
-        super(Conv2dConnection, self).__init__(
-            src, dst, operation=conv, **kwargs)
+        super(Conv2dConnection, self).__init__(src, dst, operation=conv, **kwargs)
 
 
 class SuperConvConnection(SuperConnection):
     def __init__(self, src, dst, conv=nn.Conv1d, **kwargs):
-        super(SuperConvConnection, self).__init__(
-            src, dst, operation=conv, **kwargs)
-        
+        super(SuperConvConnection, self).__init__(src, dst, operation=conv, **kwargs)
+
     def forward(self):
-        
+
         preact = self.src.out
-        
+
         # Update filters
-        new_filters = torch.einsum('bncf,fg->bncg', self.filters, self.filter_update)
-        
+        new_filters = torch.einsum("bncf,fg->bncg", self.filters, self.filter_update)
+
         # add spiketrain to first filters
         new_filters[:, :, :, 0] += preact
 
         self.filters = new_filters
-                    
-        filter_out = new_filters.view(self.filters.shape[0], 
-                                      self.src_shape * self.nb_filters,
-                                      -1)
-        
+
+        filter_out = new_filters.view(
+            self.filters.shape[0], self.src_shape * self.nb_filters, -1
+        )
+
         if not self.propagate_gradients:
             filter_out = filter_out.detach()
-        
+
         if self.flatten_input:
             shp = filter_out.shape
             filter_out = filter_out.reshape(shp[:1] + (-1,))
