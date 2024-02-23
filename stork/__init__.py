@@ -1,17 +1,18 @@
-from . import core
-from . import utils
+from . import activations
 from . import connections
 from . import constraints
-from . import nodes
-from . import regularizers
-from . import activations
+from . import core
+from . import datasets
 from . import generators
-from . import plotting
+from . import initializers
+from . import layers
 from . import loss_stacks
+from . import models
 from . import monitors
 from . import optimizers
-from . import layers
-from . import initializers
+from . import plotting
+from . import regularizers
+from . import utils
+from . import nodes
 
 __version__ = "0.1.0"
-
