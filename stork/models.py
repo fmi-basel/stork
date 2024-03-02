@@ -363,7 +363,7 @@ class RecurrentSpikingModel(nn.Module):
         nb_epochs=10,
         verbose=True,
         logger=None,
-        logging_freq=50,
+        log_interval=10,
         monitor_spikes=False,
         anneal=False,
         offset=0,
@@ -374,7 +374,7 @@ class RecurrentSpikingModel(nn.Module):
             "fitting",
             nb_epochs,
             verbose,
-            logging_freq,
+            log_interval,
             validate,
             monitor_spikes,
             anneal,
@@ -383,7 +383,6 @@ class RecurrentSpikingModel(nn.Module):
         self.hist_train = []
         if validate:
             self.hist_valid = []
-
         self.wall_clock_time = []
 
         if monitor_spikes:
@@ -399,7 +398,6 @@ class RecurrentSpikingModel(nn.Module):
             self.train(False)
 
             self.hist_train.append(ret_train)
-
             # validate
             if validate:
                 ret_valid = self.evaluate(valid_dataset)
@@ -487,7 +485,7 @@ class RecurrentSpikingModel(nn.Module):
                     )
 
             if verbose:
-                if ep % logging_freq == 0:
+                if ep % log_interval == 0:
                     self.wall_clock_time.append(t_iter)
                     if validate:
                         print(
