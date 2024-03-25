@@ -298,7 +298,7 @@ def plot_activity_snapshot(
             ax.text(
                 0.5,
                 0.8,
-                "Pred: %i" % pred[k],
+                f"P: {pred[k]}, L: {labels[k]}",
                 color="black",
                 transform=ax.transAxes,
                 fontsize=8,
