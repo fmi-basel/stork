@@ -356,6 +356,12 @@ def make_coRandman(
     for l in new_labels:
         transformed_new_labels.append(transform_labels[l])
 
+    if shuffle:
+        idx = np.arange(len(new_data))
+        np.random.shuffle(idx)
+        new_data = [new_data[i] for i in idx]
+        transformed_new_labels = [transformed_new_labels[i] for i in idx]
+
     return new_data, transformed_new_labels
 
 
