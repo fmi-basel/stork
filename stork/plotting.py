@@ -13,7 +13,7 @@ def add_scalebar(
     x1, y1 = np.array(pos) * scale
     x2, y2 = np.array((x1, y1)) + np.array(extent)
     xt, yt = np.array((np.mean((x1, x2)), np.mean((y1, y2)))) + np.array(off) * scale
-    ax.plot((x1, x2), (y1, y2), color="black")
+    ax.plot((x1, x2), (y1, y2), color="black", lw=5)
     if label:
         ax.text(xt, yt, label, **kwargs)
 
@@ -211,6 +211,8 @@ def plot_activity(
                 color=c,
                 alpha=point_alpha,
             )
+            # invert y-axis
+            ax[-1][i].invert_yaxis()
         ax[-1][i].set_ylim(-3, model.nb_inputs + 3)
         ax[-1][i].set_xlim(-3, model.nb_time_steps + 3)
 
@@ -257,6 +259,9 @@ def plot_activity(
         if i != 0:
             turn_axis_off(ax[0][i])
 
+        # invert y-axis
+        ax[-1][i].invert_yaxis()
+
     ax[0][0].set_xticks([])
     ax[0][0].spines["bottom"].set_visible(False)
 
@@ -284,10 +289,12 @@ def plot_activity_snapshot(
     bg_col="#AAAAAA",
     bg_col2="#DDDDDD",
     double=False,
-    pos=(0, 0),
+    pos=(0, -1),
     off=(0, -0.05),
     title=False,
 ):
+    print("plotting snapshot")
+
     # Run model once and get activities
     scores = model.evaluate(data, one_batch=True).tolist()
 
@@ -377,9 +384,12 @@ def plot_activity_snapshot(
                 ax[0][i].set_title(data[i][1])
             turn_axis_off(ax[0][i])
 
-    dur_10 = 10e-3 / model.time_step
+        # invert y-axis
+        ax[-1][i].invert_yaxis()
+
+    dur_50 = 50e-3 / model.time_step
     # print(dur_10)
-    add_xscalebar(ax[-1][0], dur_10, label="10ms", pos=pos, off=off, fontsize=8)
+    add_xscalebar(ax[-1][0], dur_50, label="50ms", pos=pos, off=off, fontsize=8)
 
     ax[-1][0].set_ylabel("Input")
     ax[0][0].set_ylabel("Readout")
