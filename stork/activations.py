@@ -79,8 +79,8 @@ class CustomSpike(torch.autograd.Function):
             return CustomSpike.backward_superspike(ctx, grad_output)
         elif CustomSpike.surrogate_type == "sigmoid":
             return CustomSpike.backward_sigmoid(ctx, grad_output)
-        elif CustomSpike.surrogate_type == "fake_sigmoid":
-            return CustomSpike.backward_fake_sigmoid(ctx, grad_output)
+        elif CustomSpike.surrogate_type == "scaled_sigmoid":
+            return CustomSpike.backward_scaled_sigmoid(ctx, grad_output)
         elif CustomSpike.surrogate_type == "MultilayerSpiker":
             return CustomSpike.backward_multilayerspiker(ctx, grad_output)
         elif CustomSpike.surrogate_type == "exponential":
@@ -192,7 +192,7 @@ class CustomSpike(torch.autograd.Function):
         return grad
 
     @staticmethod
-    def backward_fake_sigmoid(ctx, grad_output):
+    def backward_scaled_sigmoid(ctx, grad_output):
         """
         In the backward pass we receive a Tensor containing the gradient of the
         loss with respect to the output, and we compute the surrogate gradient
