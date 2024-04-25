@@ -23,7 +23,6 @@ class LossStack:
 
 
 class MaxOverTimeCrossEntropy(LossStack):
-
     """Readout stack that employs the max-over-time reduction strategy paired with categorical cross entropy."""
 
     def __init__(self, time_dimension=1):
@@ -74,7 +73,6 @@ class MaxOverTimeCrossEntropy(LossStack):
 
 
 class MaxOverTimeFocalLoss(LossStack):
-
     """Readout stack that employs the max-over-time reduction strategy paired with focal loss."""
 
     def __init__(
@@ -148,7 +146,6 @@ class MaxOverTimeFocalLoss(LossStack):
 
 
 class SumOverTimeCrossEntropy(LossStack):
-
     """Loss stack that employs the sum-over-time reduction strategy paired with categorical cross entropy."""
 
     def __init__(self, time_dimension=1):

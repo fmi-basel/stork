@@ -51,6 +51,7 @@ class RecurrentSpikingModel(nn.Module):
         generator=None,
         time_step=1e-3,
         wandb=None,
+        # added annealing options
         anneal_interval=0,
         anneal_step=0,
         anneal_start=0,
@@ -261,6 +262,7 @@ class RecurrentSpikingModel(nn.Module):
             metrics.append(
                 [self.out_loss.item(), self.reg_loss.item()] + self.loss_stack.metrics
             )
+            # evaluate only one batch (if needed for plotting)
             if one_batch:
                 break
 
@@ -320,6 +322,7 @@ class RecurrentSpikingModel(nn.Module):
         s = ""
         names = self.get_metric_names(prefix, postfix)
         for val, name in zip(metrics_array, names):
+            # nicer formatting for accuracy
             if "acc" in name:
                 s = s + " {} = {:.1%},".format(name, val)
             else:
@@ -356,6 +359,7 @@ class RecurrentSpikingModel(nn.Module):
         history = self.get_metrics_history_dict(np.array(self.hist))
         return history
 
+    # added validate option to fit (so that at some point, we don't need fit_validate anymore)
     def fit(
         self,
         dataset,
@@ -370,16 +374,6 @@ class RecurrentSpikingModel(nn.Module):
     ):
         if valid_dataset is not None:
             validate = True
-        print(
-            "fitting",
-            nb_epochs,
-            verbose,
-            log_interval,
-            validate,
-            monitor_spikes,
-            anneal,
-        )
-
         self.hist_train = []
         if validate:
             self.hist_valid = []
@@ -566,6 +560,7 @@ class RecurrentSpikingModel(nn.Module):
                 print("annealed", self.groups[g].act_fn.beta)
                 self.wandb.log({"beta": beta}, step=ep + offset + 2)
 
+    # added annealing to fit_validate. TODO: add wandb support
     def fit_validate(
         self,
         dataset,
