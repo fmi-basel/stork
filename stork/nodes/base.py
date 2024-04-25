@@ -11,9 +11,18 @@ class CellGroup(core.NetworkNode):
     Base class from which all neurons are derived.
 
     """
+
     clk = 0
 
-    def __init__(self, shape, store_sequences=None, name=None, regularizers=None, dropout_p=0.0, stateful=False):
+    def __init__(
+        self,
+        shape,
+        store_sequences=None,
+        name=None,
+        regularizers=None,
+        dropout_p=0.0,
+        stateful=False,
+    ):
         super(CellGroup, self).__init__(name, regularizers)
         if type(shape) == int:
             self.shape = (shape,)
@@ -47,15 +56,15 @@ class CellGroup(core.NetworkNode):
         self.states[key] = state
 
     def prepare_state_tensor_(self, state=None, init=0.0, shape=None):
-        """ Prepares a state tensor by either initializing it or copying the previous one.
+        """Prepares a state tensor by either initializing it or copying the previous one.
 
-        Args: 
+        Args:
             state (tensor): The previous state tensor if one exists
             init (float): Numerical value to init tensor with
             shape (None or tuple): Shape of the state. Assuming a single value if none.
 
         Returns:
-            A tensor with dimensions current_batch_size x neuronal_shape x shape 
+            A tensor with dimensions current_batch_size x neuronal_shape x shape
         """
 
         if self.stateful and state is not None and state.size() == self.int_shape:
@@ -64,34 +73,37 @@ class CellGroup(core.NetworkNode):
             if shape is None:
                 full_shape = self.int_shape
             else:
-                full_shape = self.int_shape+shape
+                full_shape = self.int_shape + shape
 
             if init:
-                new_state = init * \
-                    torch.ones(full_shape, device=self.device,
-                               dtype=self.dtype)
+                new_state = init * torch.ones(
+                    full_shape, device=self.device, dtype=self.dtype
+                )
             else:
                 new_state = torch.zeros(
-                    full_shape, device=self.device, dtype=self.dtype)
+                    full_shape, device=self.device, dtype=self.dtype
+                )
 
         return new_state
 
     def get_state_tensor(self, key, state=None, init=0.0, shape=None):
         self.states[key] = state = self.prepare_state_tensor_(
-            state=state, init=init, shape=shape)
+            state=state, init=init, shape=shape
+        )
         return state
 
     def add_to_state(self, target, x):
-        """ Add x to state tensor. Mostly used by Connection objects to implement synaptic transmission. """
+        """Add x to state tensor. Mostly used by Connection objects to implement synaptic transmission."""
         self.states[target] += x
 
     def scale_and_add_to_state(self, scale, target, x):
-        """ Add x to state tensor. Mostly used by Connection objects to implement synaptic transmission. """
-        self.add_to_state(target, scale*x)
+        """Add x to state tensor. Mostly used by Connection objects to implement synaptic transmission."""
+        self.add_to_state(target, scale * x)
 
     def clear_input(self):
         self.input = self.states["input"] = torch.zeros(
-            self.int_shape, device=self.device, dtype=self.dtype)
+            self.int_shape, device=self.device, dtype=self.dtype
+        )
 
     def reset_state(self, batch_size=None):
         if batch_size is None:
@@ -104,7 +116,7 @@ class CellGroup(core.NetworkNode):
             self.stored_sequences_[key] = []
 
     def evolve(self):
-        """ Advances simulation of group by one timestep and append output to out_seq. """
+        """Advances simulation of group by one timestep and append output to out_seq."""
         self.forward()
         self.set_state_tensor("out", self.out)
         if self.dropout is not None:
@@ -124,7 +136,8 @@ class CellGroup(core.NetworkNode):
             return self.get_state_sequence("input")
         else:
             print(
-                "Warning requested input sequence was not stored. Add 'input' to  store_state_sequences list.")
+                "Warning requested input sequence was not stored. Add 'input' to  store_state_sequences list."
+            )
             return None
 
     def get_out_sequence(self):

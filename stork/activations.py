@@ -66,6 +66,8 @@ class CustomSpike(torch.autograd.Function):
             return CustomSpike.forward_sigmoid_s(ctx, input)
         elif CustomSpike.escape_noise_type == "exponential":
             return CustomSpike.forward_exponential_s(ctx, input)
+        elif CustomSpike.escape_noise_type == "SuperSpike":
+            return CustomSpike.forward_superspike_s(ctx, input)
         else:
             raise ValueError(
                 "Escape noise type not supported. Please chose one of the following: step, sigmoid, exponential"
@@ -77,6 +79,8 @@ class CustomSpike(torch.autograd.Function):
             return CustomSpike.backward_superspike(ctx, grad_output)
         elif CustomSpike.surrogate_type == "sigmoid":
             return CustomSpike.backward_sigmoid(ctx, grad_output)
+        elif CustomSpike.surrogate_type == "scaled_sigmoid":
+            return CustomSpike.backward_scaled_sigmoid(ctx, grad_output)
         elif CustomSpike.surrogate_type == "MultilayerSpiker":
             return CustomSpike.backward_multilayerspiker(ctx, grad_output)
         elif CustomSpike.surrogate_type == "exponential":
@@ -116,9 +120,6 @@ class CustomSpike(torch.autograd.Function):
         out[prob > p] = 1
         return out
 
-    p0 = 0.01
-    delta_u = 0.133
-
     @staticmethod
     def forward_exponential_s(ctx, input):
         """
@@ -132,6 +133,25 @@ class CustomSpike(torch.autograd.Function):
         prob = CustomSpike.escape_noise_params["p0"] * torch.exp(
             input / CustomSpike.escape_noise_params["delta_u"]
         )
+        if prob.get_device() < 0:
+            p = torch.rand(size=prob.shape)
+        else:
+            p = torch.rand(size=prob.shape, device=prob.get_device())
+        out[prob > p] = 1
+        return out
+
+    @staticmethod
+    def forward_superspike_s(ctx, input):
+        """
+        In the forward pass we receive a Tensor containing the input and return
+        a Tensor containing the output using a fast sigmoid probability scaled by 1/beta of spiking.
+        ctx is the context object that is used to stash information for backward
+        pass computations.
+        """
+        ctx.save_for_backward(input)
+        out = torch.zeros_like(input)
+        x = CustomSpike.escape_noise_params["beta"] * input
+        prob = x / (1 + torch.abs(x)) / CustomSpike.escape_noise_params["beta"]
         if prob.get_device() < 0:
             p = torch.rand(size=prob.shape)
         else:
@@ -168,6 +188,21 @@ class CustomSpike(torch.autograd.Function):
         grad_input = grad_output.clone()
         sig = torch.sigmoid(CustomSpike.surrogate_params["beta"] * input)
         dsig = CustomSpike.surrogate_params["beta"] * sig * (1 - sig)
+        grad = grad_input * dsig
+        return grad
+
+    @staticmethod
+    def backward_scaled_sigmoid(ctx, grad_output):
+        """
+        In the backward pass we receive a Tensor containing the gradient of the
+        loss with respect to the output, and we compute the surrogate gradient
+        of the loss with respect to the input, considering a the gradient of a
+        sigmoid function as the surrogate gradient.
+        """
+        (input,) = ctx.saved_tensors
+        grad_input = grad_output.clone()
+        sig = torch.sigmoid(CustomSpike.surrogate_params["beta"] * input)
+        dsig = sig * (1 - sig)
         grad = grad_input * dsig
         return grad
 

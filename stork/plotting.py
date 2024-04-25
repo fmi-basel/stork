@@ -13,7 +13,7 @@ def add_scalebar(
     x1, y1 = np.array(pos) * scale
     x2, y2 = np.array((x1, y1)) + np.array(extent)
     xt, yt = np.array((np.mean((x1, x2)), np.mean((y1, y2)))) + np.array(off) * scale
-    ax.plot((x1, x2), (y1, y2), color="black")
+    ax.plot((x1, x2), (y1, y2), color="black", lw=5)
     if label:
         ax.text(xt, yt, label, **kwargs)
 
@@ -27,7 +27,7 @@ def add_xscalebar(ax, length, label=None, pos=(0.0, -0.1), off=(0.0, -0.07), **k
         off=off,
         verticalalignment="top",
         horizontalalignment="center",
-        **kwargs
+        **kwargs,
     )
 
 
@@ -41,7 +41,7 @@ def add_yscalebar(ax, length, label=None, pos=(-0.1, 0.0), off=(-0.07, 0.0), **k
         verticalalignment="center",
         horizontalalignment="left",
         rotation=90,
-        **kwargs
+        **kwargs,
     )
 
 
@@ -53,21 +53,31 @@ def dense2scatter_plot(
     marker=".",
     time_step=1e-3,
     jitter=None,
-    **kwargs
+    double=False,
+    color_list=["black", "black"],
+    **kwargs,
 ):
-    ras = datasets.dense2ras(dense, time_step)
-    if len(ras):
-        noise = np.zeros(ras[:, 0].shape)
-        if jitter is not None:
-            noise = jitter * np.random.randn(*ras[:, 0].shape)
-        ax.scatter(
-            ras[:, 0] + noise,
-            ras[:, 1],
-            s=point_size,
-            alpha=alpha,
-            marker=marker,
-            **kwargs
-        )
+    n = dense.shape[1] // 2
+    if double:
+        ras0 = datasets.dense2ras(dense[:, :n], time_step)
+        ras1 = datasets.dense2ras(dense[:, n:], time_step)
+        ras = [ras0, ras1]
+    else:
+        ras = [datasets.dense2ras(dense, time_step)]
+    for r, c in zip(ras, color_list):
+        if len(r):
+            noise = np.zeros(r[:, 0].shape)
+            if jitter is not None:
+                noise = jitter * np.random.randn(*r[:, 0].shape)
+            ax.scatter(
+                r[:, 0] + noise,
+                r[:, 1],
+                s=point_size,
+                alpha=alpha,
+                marker=marker,
+                color=c,
+                **kwargs,
+            )
 
 
 def save_plots(fileprefix, extensions=["pdf", "png"], dpi=300):
@@ -76,7 +86,317 @@ def save_plots(fileprefix, extensions=["pdf", "png"], dpi=300):
         plt.savefig("%s.%s" % (fileprefix, ext), dpi=dpi, bbox_inches="tight")
 
 
+def turn_axis_off(ax):
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.spines["left"].set_visible(False)
+    ax.spines["bottom"].set_visible(False)
+    ax.spines["right"].set_visible(False)
+    ax.spines["top"].set_visible(False)
+
+
+def plot_activity_over_trials(
+    model,
+    data,
+    ax,
+    layer_idx=0,
+    neuron_idx=0,
+    nb_trials=51,
+    marker=".",
+    point_size=5,
+    point_alpha=1,
+    color="black",
+    nolabel=False,
+):
+    # Run model once and get activities
+    scores = model.evaluate(data, one_batch=True).tolist()
+
+    hidden_groups = model.groups[1:-1]
+    hid_activity = [
+        g.get_flattened_out_sequence().detach().cpu().numpy() for g in hidden_groups
+    ]
+
+    nb_trials = np.min((nb_trials, hid_activity[layer_idx].shape[0]))
+
+    act = hid_activity[layer_idx][:, :, neuron_idx]
+    for i in range(nb_trials):
+        spikes = np.where(act[i])[0]
+        ax.scatter(
+            spikes,
+            np.ones_like(spikes) * i,
+            color=color,
+            alpha=point_alpha,
+            marker=marker,
+            s=point_size,
+        )
+
+    if not nolabel:
+        ax.set_ylabel("Trial idx")
+        ax.set_xlabel("Time (s)")
+    ax.set_xlim(-3, model.nb_time_steps + 3)
+    ax.set_ylim(-3, nb_trials + 3)
+    ax.set_xticks([0, model.nb_time_steps])
+    ax.set_yticks([0, nb_trials - 1])
+    sns.despine()
+
+
+def plot_activity(
+    model,
+    data,
+    nb_samples=2,
+    figsize=(5, 5),
+    dpi=250,
+    marker=".",
+    point_size=5,
+    point_alpha=1,
+    pal=sns.color_palette("muted", n_colors=20),
+    bg_col="#AAAAAA",
+    bg_col2="#DDDDDD",
+    pos=(0, 0),
+    off=(0, -0.05),
+    labels=[7, 8],
+):
+    # Run model once and get activities
+    scores = model.evaluate(data, one_batch=True).tolist()
+
+    inp = model.input_group.get_flattened_out_sequence().detach().cpu().numpy()
+    hidden_groups = model.groups[1:-1]
+    hid_activity = [
+        g.get_flattened_out_sequence().detach().cpu().numpy() for g in hidden_groups
+    ]
+    out_group = model.out.detach().cpu().numpy()
+
+    n = model.nb_inputs
+
+    inps = [inp]
+
+    nb_groups = len(hidden_groups)
+    nb_total_units = np.sum([g.nb_units for g in hidden_groups])
+    hr = [1] + [4 * g.nb_units / nb_total_units for g in hidden_groups] + [1]
+    hr = list(reversed(hr))  # since we are plotting from bottom to top
+
+    fig, ax = plt.subplots(
+        nb_groups + 2,
+        nb_samples,
+        figsize=figsize,
+        dpi=dpi,
+        sharex="row",
+        sharey="row",
+        gridspec_kw={"height_ratios": hr},
+    )
+
+    sns.despine()
+
+    samples = []
+
+    label_idx = 0
+    while len(samples) < nb_samples:
+        for i in range(len(data)):
+            if data[i][1] == labels[label_idx]:
+                label_idx += 1
+                samples.append(i)
+                break
+
+    for i, s in enumerate(samples):
+        # plot and color input spikes
+
+        for idx, inp in enumerate(inps):
+            c = pal[i]
+
+            ax[-1][i].scatter(
+                np.where(inp[s])[0],
+                np.where(inp[s])[1] + idx * n,
+                s=point_size,
+                marker=marker,
+                color=c,
+                alpha=point_alpha,
+            )
+            # invert y-axis
+            ax[-1][i].invert_yaxis()
+        ax[-1][i].set_ylim(-3, model.nb_inputs + 3)
+        ax[-1][i].set_xlim(-3, model.nb_time_steps + 3)
+
+        if i != 0:
+            ax[-1][i].set_yticks([])
+            ax[-1][i].spines["left"].set_visible(False)
+            ax[-1][i].spines["right"].set_visible(False)
+            ax[-1][i].spines["top"].set_visible(False)
+
+        # plot hidden layer spikes
+        for g in range(nb_groups):
+            ax[-(2 + g)][i].scatter(
+                np.where(hid_activity[g][s])[0],
+                np.where(hid_activity[g][s])[1],
+                s=point_size / 2,
+                marker=marker,
+                color="k",
+                alpha=point_alpha,
+            )
+
+            ax[-(2 + g)][0].set_ylabel("Hid. " + str(g))
+            # turn off x-axis
+            ax[-(2 + g)][i].set_xticks([])
+            ax[-(2 + g)][i].set_yticks([])
+            ax[-(2 + g)][i].spines["bottom"].set_visible(False)
+            ax[-(2 + g)][i].set_xlim(-3, model.nb_time_steps + 3)
+
+            if i != 0:
+                turn_axis_off(ax[-(2 + g)][i])
+
+        for line_index, ro_line in enumerate(np.transpose(out_group[s])):
+            c = bg_col
+            alpha = 0.5
+            zorder = -5
+
+            for j, sidx in enumerate(samples):
+                if line_index == data[sidx][1]:
+                    c = pal[j]
+                    alpha = 1
+                    zorder = 1
+            ax[0][i].plot(ro_line, color=c, zorder=zorder, alpha=alpha)
+
+        ax[-1][i].set_xlabel("Time (s)")
+        if i != 0:
+            turn_axis_off(ax[0][i])
+
+        # invert y-axis
+        ax[-1][i].invert_yaxis()
+
+    ax[0][0].set_xticks([])
+    ax[0][0].spines["bottom"].set_visible(False)
+
+    ax[-1][0].set_ylabel("Input")
+    ax[0][0].set_ylabel("Readout")
+    ax[-1][0].set_yticks([])
+    ax[0][0].set_yticks([])
+
+    duration = round(model.nb_time_steps * model.time_step * 10) / 10
+    ax[-1][0].set_xticks([0, model.nb_time_steps], [0, duration])
+
+    plt.tight_layout()
+
+
 def plot_activity_snapshot(
+    model,
+    data,
+    nb_samples=5,
+    figsize=(10, 5),
+    dpi=250,
+    marker=".",
+    point_size=5,
+    point_alpha=1,
+    pal=sns.color_palette("muted", n_colors=20),
+    bg_col="#AAAAAA",
+    bg_col2="#DDDDDD",
+    double=False,
+    pos=(0, -1),
+    off=(0, -0.05),
+    title=False,
+):
+    print("plotting snapshot")
+
+    # Run model once and get activities
+    scores = model.evaluate(data, one_batch=True).tolist()
+
+    inp = model.input_group.get_flattened_out_sequence().detach().cpu().numpy()
+    hidden_groups = model.groups[1:-1]
+    hid_activity = [
+        g.get_flattened_out_sequence().detach().cpu().numpy() for g in hidden_groups
+    ]
+    out_group = model.out.detach().cpu().numpy()
+
+    n = model.nb_inputs
+    m = out_group.shape[-1]
+    if double:
+        n = n // 2
+        m = m // 2
+
+    if double:
+        inp1 = inp[:, :, :n]
+        inp2 = inp[:, :, n:]
+        inps = [inp1, inp2]
+    else:
+        inps = [inp]
+
+    nb_groups = len(hidden_groups)
+    nb_total_units = np.sum([g.nb_units for g in hidden_groups])
+    hr = [1] + [4 * g.nb_units / nb_total_units for g in hidden_groups] + [1]
+    hr = list(reversed(hr))  # since we are plotting from bottom to top
+
+    fig, ax = plt.subplots(
+        nb_groups + 2,
+        nb_samples,
+        figsize=figsize,
+        dpi=dpi,
+        sharex=True,
+        sharey="row",
+        gridspec_kw={"height_ratios": hr},
+    )
+
+    for i in range(nb_samples):
+        # plot and color input spikes
+        for idx, inp in enumerate(inps):
+            if double:
+                c = pal[data[idx][i][1] + idx * m]
+            else:
+                c = pal[data[i][1]]
+            ax[-1][i].scatter(
+                np.where(inp[i])[0],
+                np.where(inp[i])[1] + idx * n,
+                s=point_size,
+                marker=marker,
+                color=c,
+                alpha=point_alpha,
+            )
+        ax[-1][i].set_ylim(-3, model.nb_inputs + 3)
+        ax[-1][i].set_xlim(-3, model.nb_time_steps + 3)
+        turn_axis_off(ax[-1][i])
+
+        # plot hidden layer spikes
+        for g in range(nb_groups):
+            ax[-(2 + g)][i].scatter(
+                np.where(hid_activity[g][i])[0],
+                np.where(hid_activity[g][i])[1],
+                s=point_size / 2,
+                marker=marker,
+                color="k",
+                alpha=point_alpha,
+            )
+            turn_axis_off(ax[-(2 + g)][i])
+
+            ax[-(2 + g)][0].set_ylabel("Hid. " + str(g))
+
+        for line_index, ro_line in enumerate(np.transpose(out_group[i])):
+            if double:
+                if line_index == data[0][i][1] or line_index == data[1][i][1] + m:
+                    ax[0][i].plot(ro_line, color=pal[line_index])
+                else:
+                    if line_index < m:
+                        ax[0][i].plot(ro_line, color=bg_col, zorder=-5, alpha=0.5)
+                    else:
+                        ax[0][i].plot(ro_line, color=bg_col2, zorder=-5, alpha=0.5)
+            else:
+                if line_index == data[i][1]:
+                    ax[0][i].plot(ro_line, color=pal[line_index])
+                else:
+                    ax[0][i].plot(ro_line, color=bg_col, zorder=-5, alpha=0.5)
+            if title:
+                ax[0][i].set_title(data[i][1])
+            turn_axis_off(ax[0][i])
+
+        # invert y-axis
+        ax[-1][i].invert_yaxis()
+
+    dur_50 = 50e-3 / model.time_step
+    # print(dur_10)
+    add_xscalebar(ax[-1][0], dur_50, label="50ms", pos=pos, off=off, fontsize=8)
+
+    ax[-1][0].set_ylabel("Input")
+    ax[0][0].set_ylabel("Readout")
+    plt.tight_layout()
+
+
+def plot_activity_snapshot_old(
     model,
     data=None,
     labels=None,
@@ -202,7 +522,7 @@ def plot_activity_snapshot(
                 point_size=point_size,
                 alpha=point_alpha,
                 time_step=time_step,
-                color=color,
+                color_list=[color],
                 jitter=time_jitter,
             )
         else:
@@ -238,7 +558,7 @@ def plot_activity_snapshot(
                 point_size=point_size,
                 alpha=point_alpha,
                 time_step=time_step,
-                color="black",
+                # color="black",
                 jitter=time_jitter,
             )
             ax.axis("off")

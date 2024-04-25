@@ -23,7 +23,6 @@ class LossStack:
 
 
 class MaxOverTimeCrossEntropy(LossStack):
-
     """Readout stack that employs the max-over-time reduction strategy paired with categorical cross entropy."""
 
     def __init__(self, time_dimension=1):
@@ -74,7 +73,6 @@ class MaxOverTimeCrossEntropy(LossStack):
 
 
 class MaxOverTimeFocalLoss(LossStack):
-
     """Readout stack that employs the max-over-time reduction strategy paired with focal loss."""
 
     def __init__(
@@ -148,7 +146,6 @@ class MaxOverTimeFocalLoss(LossStack):
 
 
 class SumOverTimeCrossEntropy(LossStack):
-
     """Loss stack that employs the sum-over-time reduction strategy paired with categorical cross entropy."""
 
     def __init__(self, time_dimension=1):
@@ -340,3 +337,67 @@ class DictMeanSquareError(MeanSquareError):
 
     def __call__(self, output, targets):
         return self.compute_loss(output, targets)
+
+
+class DoubleData_MaxOverTimeCrossEntropy(MaxOverTimeCrossEntropy):
+
+    """Readout stack that employs the max-over-time reduction strategy paired with categorical cross entropy."""
+
+    def __init__(self, time_dimension=1, frac=0.5):
+        super().__init__()
+        self.log_softmax = nn.LogSoftmax(dim=1)
+        self.neg_log_likelihood_loss = nn.NLLLoss()
+        self.time_dim = time_dimension
+        self.frac = frac
+
+    def acc_fn(self, log_p_y, target_labels):
+        """Computes classification accuracy from log_p_y and corresponding target labels
+
+        Args:
+            log_p_y: The log softmax output (log p_y_given_x) of the model.
+            target_labels: The integer target labels (not one hot encoding).
+
+        Returns:
+            Float of mean classification accuracy.
+        """
+        _, pred_labels0 = torch.max(log_p_y[0], dim=self.time_dim)
+        _, pred_labels1 = torch.max(log_p_y[1], dim=self.time_dim)
+
+        a = self.frac * (pred_labels0 == target_labels[:, 0]) + (1 - self.frac) * (
+            pred_labels1 == target_labels[:, 1]
+        )
+        return (1.0 * a.cpu().numpy()).mean()
+
+    def get_metric_names(self):
+        return ["acc"]
+
+    def compute_loss(self, output, targets):
+        """Computes crossentropy loss on softmax defined over maxpooling over time"""
+        ma0, _ = torch.max(output[0], self.time_dim)  # reduce along time with max
+        ma1, _ = torch.max(output[1], self.time_dim)  # reduce along time with max
+        log_p_y0 = self.log_softmax(ma0)
+        log_p_y1 = self.log_softmax(ma1)
+        loss_value0 = self.neg_log_likelihood_loss(
+            log_p_y0, targets[:, 0]
+        )  # compute supervised loss
+        loss_value1 = self.neg_log_likelihood_loss(log_p_y1, targets[:, 1])
+        acc_val = self.acc_fn([log_p_y0, log_p_y1], targets)
+        self.metrics = [acc_val.item()]
+        return loss_value0 + loss_value1
+
+    def log_py_given_x(self, output):
+        ma, _ = torch.max(output, self.time_dim)  # reduce along time with max
+        log_p_y = self.log_softmax(ma)
+        return log_p_y
+
+    def predict(self, output):
+        _, pred_labels0 = torch.max(self.log_py_given_x(output[0]), dim=1)
+        _, pred_labels1 = torch.max(self.log_py_given_x(output[1]), dim=1)
+        return [pred_labels0, pred_labels1]
+
+    def __call__(self, output, targets):
+        return self.compute_loss(output, targets)
+
+
+# For backward compatibility
+TemporalCrossEntropyReadoutStack = MaxOverTimeCrossEntropy
