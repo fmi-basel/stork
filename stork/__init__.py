@@ -5,6 +5,7 @@ from . import core
 from . import datasets
 from . import generators
 from . import initializers
+from . import nodes
 from . import layers
 from . import loss_stacks
 from . import models
