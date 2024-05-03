@@ -1,4 +1,4 @@
-from setuptools import setup
+from setuptools import setup, find_packages
 
 setup(
     name="stork",
@@ -7,6 +7,6 @@ setup(
     author="Friedemann Zenke",
     author_email="fzenke@gmail.com",
     license="MIT",
-    packages=["stork"],
+    packages=find_packages(),
     zip_safe=False,
 )
