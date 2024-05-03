@@ -2,7 +2,7 @@
 # Julian, October 2021
 
 from . import connections
-from . import nodes
+from . import nodes as nd
 from . import utils
 from . import constraints
 from typing import Iterable
@@ -99,7 +99,7 @@ class Layer(AbstractLayer):
         regs=None,
         w_regs=None,
         connection_class=connections.Connection,
-        neuron_class=nodes.LIFGroup,
+        neuron_class=nd.LIFGroup,
         flatten_input_layer=True,
         neuron_kwargs={},
         connection_kwargs={},
@@ -149,7 +149,7 @@ class ConvLayer(AbstractLayer):
         regs=None,
         w_regs=None,
         connection_class=connections.ConvConnection,
-        neuron_class=nodes.LIFGroup,
+        neuron_class=nd.LIFGroup,
         neuron_kwargs={},
         connection_kwargs={},
         recurrent_connection_kwargs={},
@@ -234,7 +234,7 @@ class DalianLayer(AbstractLayer):
         regs=None,
         w_regs=None,
         connection_class=connections.Connection,
-        neuron_class=nodes.ExcInhLIFGroup,
+        neuron_class=nd.ExcInhLIFGroup,
         flatten_input_layer=True,
         exc_neuron_kwargs={},
         inh_neuron_kwargs={},
