@@ -6,14 +6,18 @@ from stork import activations
 from stork.nodes.base import CellGroup
 
 
-class LIFGroup(CellGroup):
+class FilterLIFGroup(CellGroup):
     def __init__(
         self,
         shape,
+        nb_groups,
         tau_mem=10e-3,
-        tau_syn=5e-3,
+        tau_filter=5e-3,
+        nb_filters=5,
         diff_reset=False,
         learn_timescales=False,
+        learn_A=False,
+        nb_off_diag=1,
         clamp_mem=False,
         activation=activations.SuperSpike,
         dropout_p=0.0,
@@ -56,25 +60,50 @@ class LIFGroup(CellGroup):
             regularizers=regularizers,
             **kwargs
         )
+        self.nb_groups = nb_groups
         self.tau_mem = tau_mem
-        self.tau_syn = tau_syn
+        self.tau_filter = tau_filter
+        self.nb_filters = nb_filters
+
+        self.learn_A = learn_A
+        self.nb_off_diag = nb_off_diag
+
         self.spk_nl = activation.apply
         self.diff_reset = diff_reset
         self.learn_timescales = learn_timescales
         self.clamp_mem = clamp_mem
         self.mem = None
-        self.syn = None
+        self.filt = None
+        self.W_filt = None
 
     def configure(self, batch_size, nb_steps, time_step, device, dtype):
         self.dcy_mem = float(np.exp(-time_step / self.tau_mem))
         self.scl_mem = 1.0 - self.dcy_mem
-        self.dcy_syn = float(np.exp(-time_step / self.tau_syn))
-        self.scl_syn = 1.0 - self.dcy_syn
+
+        # create A matrix
+        self.dcy_filter = float(np.exp(-time_step / self.tau_filter))
+        self.scl_filter = 1 - self.dcy_filter
+
+        A_shape = (self.nb_filters, self.nb_filters)
+        self.A = torch.zeros(A_shape, device=device, dtype=dtype)
+        self.A.fill_diagonal_(self.dcy_filter)
+
+        for d in range(self.nb_off_diag):
+            for i in range(self.nb_filters - d):
+                self.A[i, i + d] = self.scl_filter
+
+        filt_param = torch.randn(
+            (self.nb_groups, self.nb_filters),
+            device=device,
+            dtype=dtype,
+            requires_grad=True,
+        )
+        self.filt_param = Parameter(filt_param, requires_grad=True)
+
         if self.learn_timescales:
             mem_param = torch.randn(1, device=device, dtype=dtype, requires_grad=True)
-            syn_param = torch.randn(1, device=device, dtype=dtype, requires_grad=True)
             self.mem_param = Parameter(mem_param, requires_grad=self.learn_timescales)
-            self.syn_param = Parameter(syn_param, requires_grad=self.learn_timescales)
+
         super().configure(batch_size, nb_steps, time_step, device, dtype)
 
     def reset_state(self, batch_size=None):
@@ -84,12 +113,16 @@ class LIFGroup(CellGroup):
                 -self.time_step / (2 * self.tau_mem * torch.sigmoid(self.mem_param))
             )
             self.scl_mem = 1.0 - self.dcy_mem
-            self.dcy_syn = torch.exp(
-                -self.time_step / (2 * self.tau_syn * torch.sigmoid(self.syn_param))
-            )
-            self.scl_syn = 1.0 - self.dcy_syn
+
+        self.filter_shape = (batch_size, *self.shape, self.nb_filters)
+
+        self.filt = torch.zeros(*self.filter_shape, device=self.device, dtype=self.dtype)
+
+        self.W_filt = self.filt_param.expand(
+            size=(self.nb_units // self.nb_groups, *self.filt_param.shape)
+        ).reshape(shape=(self.nb_units, self.nb_filters))
+
         self.mem = self.get_state_tensor("mem", state=self.mem)
-        self.syn = self.get_state_tensor("syn", state=self.syn)
         self.out = self.states["out"] = torch.zeros(
             self.int_shape, device=self.device, dtype=self.dtype
         )
@@ -110,9 +143,17 @@ class LIFGroup(CellGroup):
         # spike & reset
         new_out, rst = self.get_spike_and_reset(self.mem)
 
-        # synaptic & membrane dynamics
-        new_syn = self.dcy_syn * self.syn + self.input
-        new_mem = (self.dcy_mem * self.mem + self.scl_mem * self.syn) * (
+        # synaptic dynamics
+        # Update filters
+        new_filt = torch.einsum("bnf,fg->bng", self.filt, self.A)
+        # add spiketrain to first filters
+        new_filt[:, :, 0] += self.input
+        # TODO: check whether the input is added correctly
+
+        syn_input = torch.einsum("nf,bnf->bn", self.W_filt, new_filt)
+
+        # membrane dynamics
+        new_mem = (self.dcy_mem * self.mem + self.scl_mem * syn_input) * (
             1.0 - rst
         )  # multiplicative reset
 
@@ -122,4 +163,4 @@ class LIFGroup(CellGroup):
 
         self.out = self.states["out"] = new_out
         self.mem = self.states["mem"] = new_mem
-        self.syn = self.states["syn"] = new_syn
+        self.filt = new_filt
