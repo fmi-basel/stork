@@ -88,7 +88,7 @@ class FilterLIFGroup(CellGroup):
         self.A = torch.zeros(A_shape, device=device, dtype=dtype)
         self.A.fill_diagonal_(self.dcy_filter)
 
-        for d in range(self.nb_off_diag):
+        for d in range(1, self.nb_off_diag + 1):
             for i in range(self.nb_filters - d):
                 self.A[i, i + d] = self.scl_filter
 
@@ -116,7 +116,9 @@ class FilterLIFGroup(CellGroup):
 
         self.filter_shape = (batch_size, *self.shape, self.nb_filters)
 
-        self.filt = torch.zeros(*self.filter_shape, device=self.device, dtype=self.dtype)
+        self.filt = torch.zeros(
+            *self.filter_shape, device=self.device, dtype=self.dtype
+        )
 
         self.W_filt = self.filt_param.expand(
             size=(self.nb_units // self.nb_groups, *self.filt_param.shape)
