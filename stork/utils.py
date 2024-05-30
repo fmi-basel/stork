@@ -80,6 +80,32 @@ def get_lif_kernel(tau_mem=20e-3, tau_syn=10e-3, dt=1e-3):
     return kernel
 
 
+def lif_membrane_dynamics(input_current, tau_mem, dt=1e-3):
+    """
+    Computes LIF membrane dynamics for n postsynaptic neurons.
+    Input_current is a torch.tensor of shape [ts] or [n, ts]
+    
+    returns a kernel of shape [ts] or [n, ts]
+    """
+    
+    if input_current.dim() == 1:
+        U = 0.0
+        n = 1
+        ts = np.arange(len(input_current)) * dt
+    else:
+        U = torch.zeros(input_current.shape[0])  
+        n = input_current.shape[0]  
+        ts = np.arange(input_current.shape[1]) * dt
+        
+    kernel = torch.empty(input_current.shape)
+    dcy = np.exp(-dt/tau_mem)
+    for i, t in enumerate(ts):
+        kernel[..., i] = U
+        U = dcy * U + (1.0-dcy) * input_current[..., i]
+        
+    return kernel
+
+
 def convlayer_size(nb_inputs, kernel_size, padding, stride):
     """
     Calculates output size of convolutional layer

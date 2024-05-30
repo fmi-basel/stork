@@ -284,9 +284,6 @@ class SuperConnection(BaseConnection):
         Used to inspect the learned synaptic filters.
         Returns an object of shape (time, n_pre, n_post)
         that contains the weighted filterbanks for each connection.
-        
-        If sum_over_filters=False, returns an object of shape (time, n_pre, n_post, n_filters)
-        with each individually weighted filter.
         """
         
         # Prepare empty tensors
