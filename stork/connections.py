@@ -236,6 +236,10 @@ class SuperConnection(BaseConnection):
     def forward(self):
 
         preact = self.src.out
+        
+        if self.flatten_input:
+            shp = preact.shape
+            preact = preact.reshape(shp[:1] + (-1,))
 
         # Update filters
         new_filters = torch.einsum("bnf,fg->bng", self.filters, self.filter_update)
