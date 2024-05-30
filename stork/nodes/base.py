@@ -35,7 +35,7 @@ class CellGroup(core.NetworkNode):
 
     def configure(self, batch_size, nb_steps, time_step, device, dtype):
         super().configure(batch_size, nb_steps, time_step, device, dtype)
-        self.reset_state()
+        self.reset_state(batch_size)
 
     def get_regularizer_loss(self):
         reg_loss = torch.tensor(0.0, device=self.device)
