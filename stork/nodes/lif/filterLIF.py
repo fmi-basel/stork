@@ -6,6 +6,8 @@ from stork import activations
 from stork.nodes.base import CellGroup
 from stork.utils import lif_membrane_dynamics
 
+EPSILON = 1e-9
+
 
 class FilterLIFGroup(CellGroup):
     def __init__(
@@ -289,7 +291,7 @@ class FilterLIFGroup(CellGroup):
         # shape [time, nb_groups]
         kernels = self.get_membrane_kernel_by_group(time_step)
         
-        epsilon_bar = (kernels.sum(0) * time_step).mean()
+        epsilon_bar = (kernels.sum(0) * time_step).mean() + EPSILON
         epsilon_hat = ((kernels**2).sum(0) * time_step).mean()
         
         return epsilon_bar, epsilon_hat
