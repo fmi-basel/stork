@@ -349,7 +349,7 @@ class RecurrentSpikingModel(nn.Module):
 
             if self.wandb is not None:
                 self.wandb.log({key: value for (key, value) in zip(self.get_metric_names(
-                ) + self.get_metric_names(prefix="val_"), ret_train.tolist() + ret_valid.tolist())})
+                ) + self.get_metric_names(prefix="val_") + ["t_iter"], ret_train.tolist() + ret_valid.tolist() + [time.time() - t_start])})
 
             if verbose:
                 t_iter = (time.time() - t_start)
