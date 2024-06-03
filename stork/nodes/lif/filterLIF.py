@@ -25,7 +25,7 @@ class FilterLIFGroup(CellGroup):
         activation=activations.SuperSpike,
         dropout_p=0.0,
         stateful=False,
-        name="LIFGroup",
+        name="FilterLIFGroup",
         regularizers=None,
         **kwargs
     ):
