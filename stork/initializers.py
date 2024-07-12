@@ -51,12 +51,13 @@ class Initializer:
     """
 
     def __init__(
-        self, scaling="1/sqrt(k)", sparseness=1.0, bias_scale=1.0, bias_mean=0.0
+        self, scaling="1/sqrt(k)", sparseness=1.0, bias_scale=1.0, bias_mean=0.0, dtype=torch.float32
     ):
         self.scaling = scaling
         self.sparseness = sparseness
         self.bias_scale = bias_scale
         self.bias_mean = bias_mean
+        self.dtype = dtype
 
     def initialize(self, target):
         if isinstance(target, connections.BaseConnection):
@@ -143,7 +144,7 @@ class Initializer:
 
         # set weights
         with torch.no_grad():
-            connection.op.weight.data = weights
+            connection.op.weight.data = weights.type(self.dtype)
 
     def _set_biases(self, connection):
         """
@@ -159,6 +160,7 @@ class Initializer:
                 connection.op.bias.uniform_(
                     -bound + self.bias_mean, bound + self.bias_mean
                 )
+                connection.op.bias.data = connection.op.bias.data.type(self.dtype)
 
     def _get_weights(self, *params):
         raise NotImplementedError
