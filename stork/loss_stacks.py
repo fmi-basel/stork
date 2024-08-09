@@ -380,8 +380,9 @@ class SumOfSoftmaxCrossEntropy(LossStack):
         return loss_value
 
     def log_py_given_x(self, output):
-        ma, _ = torch.max(output, self.time_dim)  # reduce along time with max
-        log_p_y = self.log_softmax(ma)
+        p_y_t = self.softmax(output)              # [batch x time x n_classes]
+        su = torch.sum(p_y_t, self.time_dim)       # Should be batch x n_classes
+        log_p_y = self.log_softmax(su)             # Should be batch x n_classes
         return log_p_y
 
     def predict(self, output):
@@ -409,3 +410,9 @@ class MeanOfSoftmaxCrossEntropy(SumOfSoftmaxCrossEntropy):
         acc_val = self.acc_fn(log_p_y, targets)
         self.metrics = [acc_val.item()]
         return loss_value
+
+    def log_py_given_x(self, output):
+        p_y_t = self.softmax(output)              # [batch x time x n_classes]
+        su = torch.mean(p_y_t, self.time_dim)       # Should be batch x n_classes
+        log_p_y = self.log_softmax(su)             # Should be batch x n_classes
+        return log_p_y
