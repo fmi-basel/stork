@@ -779,6 +779,8 @@ class RasDataset(SpikingDataset):
         p_insert=0.0,
         sigma_t=0.0,
         time_scale=1,
+        data_augmentation=False,
+        dtype=torch.long,
     ):
         """
         This converter provides an interface for standard Ras datasets to dense tensor format.
@@ -797,6 +799,7 @@ class RasDataset(SpikingDataset):
             p_insert=p_insert,
             sigma_t=sigma_t,
             time_scale=time_scale,
+            data_augmentation=data_augmentation
         )
 
         data, labels = dataset
@@ -812,8 +815,9 @@ class RasDataset(SpikingDataset):
 
         self.data = Xscaled
         self.labels = labels
+        self.dtype = dtype
         if type(self.labels) == torch.tensor:
-            self.labels = torch.cast(labels, dtype=torch.long)
+            self.labels = torch.cast(labels, dtype=dtype)
 
     def __len__(self):
         "Returns the total number of samples in dataset"
