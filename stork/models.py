@@ -635,3 +635,34 @@ class RecurrentSpikingModel(nn.Module):
         print("\n## Connections")
         for con in self.connections:
             print(con)
+
+    
+    def set_dtype(self, dtype):
+        self.dtype = dtype
+        
+        for g in self.groups:
+            g.set_dtype(dtype)
+        for c in self.connections:
+            c.set_dtype(dtype)
+            
+        self.to(self.device)
+        return self
+    
+
+    def half(self):
+        """ 
+        Convert model to half precision. 
+        Because stork does not treat group states as parameters,
+        we have to convert the model to half precision manually.
+        """
+        
+        # Convert group states to half precision
+        for group in self.groups:
+            group.half()
+
+        # This will convert parameters to half precision
+        super().half()
+        
+        self.set_dtype(torch.float16)
+         
+        return self

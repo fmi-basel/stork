@@ -35,3 +35,6 @@ class NetworkNode(nn.Module):
 
     def remove_regularizers(self):
         self.regularizers = []
+
+    def set_dtype(self, dtype):
+        self.dtype = dtype
