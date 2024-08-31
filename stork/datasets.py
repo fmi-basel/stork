@@ -632,6 +632,12 @@ class SpikingDataset(torch.utils.data.Dataset):
         sigma_u=0.0,
         sigma_u_uniform=0.0,
         time_scale=1,
+        data_augmentation=True, 
+        # Before, data_augmentation was hardcoded to True in the __init__ method,
+        # thus this defaults to True if not specified.
+        # Note that with the default sigma_t=0.0, sigma_u=0.0, 
+        # sigma_u_uniform=0.0, p_drop=0.0, p_insert=0.0,
+        # the data_augmentation parameter has no effect.
     ):
         """
         This converter provides an interface for standard spiking datasets
@@ -654,7 +660,7 @@ class SpikingDataset(torch.utils.data.Dataset):
         self.nb_steps = nb_steps
         self.nb_units = nb_units
         self.nb_insert = int(self.p_insert * self.nb_steps * self.nb_units)
-        self.data_augmentation = True
+        self.data_augmentation = data_augmentation
 
     def add_noise(self, times, units):
         """
