@@ -48,6 +48,8 @@ class RecurrentSpikingModel(nn.Module):
         loss_stack=None,
         optimizer=None,
         optimizer_kwargs=None,
+        scheduler=None,
+        scheduler_kwargs=None,
         generator=None,
         time_step=1e-3,
         wandb=None,
@@ -95,6 +97,11 @@ class RecurrentSpikingModel(nn.Module):
         self.optimizer_class = optimizer
         self.optimizer_kwargs = optimizer_kwargs
         self.configure_optimizer(self.optimizer_class, self.optimizer_kwargs)
+        
+        self.scheduler_class = scheduler
+        self.scheduler_kwargs = scheduler_kwargs
+        self.configure_scheduler(self.scheduler_class, self.scheduler_kwargs)
+        
         self.to(self.device)
 
     def time_rescale(self, time_step=1e-3, batch_size=None):
@@ -104,6 +111,8 @@ class RecurrentSpikingModel(nn.Module):
             self.batch_size = batch_size
         saved_state = self.state_dict()
         saved_optimizer = self.optimizer_instance
+        saved_scheduler = self.scheduler_instance
+
         self.nb_time_steps = int(self.nb_time_steps * self.time_step / time_step)
         self.configure(
             self.input_group,
@@ -113,10 +122,13 @@ class RecurrentSpikingModel(nn.Module):
             time_step=time_step,
             optimizer=self.optimizer_class,
             optimizer_kwargs=self.optimizer_kwargs,
+            scheduler=self.scheduler_class,
+            scheduler_kwargs=self.scheduler_kwargs,
             wandb=self.wandb,
         )
         # Commenting this out will re-init the optimizer
         self.optimizer_instance = saved_optimizer
+        self.scheduler_instance = saved_scheduler
         self.load_state_dict(saved_state)
 
     def configure_optimizer(self, optimizer_class, optimizer_kwargs):
@@ -126,6 +138,18 @@ class RecurrentSpikingModel(nn.Module):
             )
         else:
             self.optimizer_instance = optimizer_class(self.parameters())
+
+    def configure_scheduler(self, scheduler_class, scheduler_kwargs):
+        if scheduler_class is None:
+            self.scheduler_instance = None
+        else:
+            if scheduler_kwargs is not None:
+                self.scheduler_instance = scheduler_class(
+                    self.optimizer_instance, **scheduler_kwargs
+                )
+            else:
+                self.scheduler_instance = scheduler_class(self.optimizer_instance)
+
 
     def reconfigure(self):
         """Runs configure and replaces arguments with default from last run.
@@ -280,6 +304,9 @@ class RecurrentSpikingModel(nn.Module):
             self.optimizer_instance.step()
             self.apply_constraints()
 
+        if self.scheduler_instance is not None:
+            self.scheduler_instance.step()
+
         return np.mean(np.array(metrics), axis=0)
 
     def train_epoch(self, dataset, shuffle=True):
@@ -301,6 +328,9 @@ class RecurrentSpikingModel(nn.Module):
 
             self.optimizer_instance.step()
             self.apply_constraints()
+            
+        if self.scheduler_instance is not None:
+            self.scheduler_instance.step()
 
         return np.mean(np.array(metrics), axis=0)
 
