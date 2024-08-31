@@ -365,6 +365,13 @@ class RecurrentSpikingModel(nn.Module):
             s = s + " %s=%.3g" % (name, val)
         return s
 
+    def get_metrics_dict(self, metrics_array, prefix="", postfix=""):
+        s = {}
+        names = self.get_metric_names(prefix, postfix)
+        for val, name in zip(metrics_array, names):
+            s[name] = val
+        return s
+
     def get_metrics_history_dict(self, metrics_array, prefix="", postfix=""):
         " Create metrics history dict. " ""
         s = ""
