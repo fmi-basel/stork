@@ -103,6 +103,26 @@ class RecurrentSpikingModel(nn.Module):
         self.configure_scheduler(self.scheduler_class, self.scheduler_kwargs)
         
         self.to(self.device)
+        
+        
+    def set_nb_steps(self, nb_time_steps):
+        self.nb_time_steps = nb_time_steps
+        
+        # configure data generator
+        self.data_generator_.configure(
+            self.batch_size,
+            self.nb_time_steps,
+            self.nb_inputs,
+            self.time_step,
+            device=self.device,
+            dtype=self.dtype,
+        )
+        
+        for g in self.groups:
+            g.set_nb_steps(nb_time_steps)
+            
+        self.reset_states()
+
 
     def time_rescale(self, time_step=1e-3, batch_size=None):
         """Saves the model then re-configures it with the old hyper parameters, but the new timestep.
