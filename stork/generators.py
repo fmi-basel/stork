@@ -39,9 +39,10 @@ class StandardGenerator(DataGenerator):
     Provides a new transitional generator class based on the Torch Dataset/Loader formalism.
     """
 
-    def __init__(self, nb_workers=1, persistent_workers=True):
+    def __init__(self, nb_workers=1, persistent_workers=True, worker_init_fn=None):
         self.nb_workers = nb_workers
         self.persistent_workers = persistent_workers
+        self.worker_init_fn = worker_init_fn
 
     def __call__(self, dataset, shuffle=True):
         return torch.utils.data.DataLoader(
@@ -50,6 +51,7 @@ class StandardGenerator(DataGenerator):
             shuffle=shuffle,
             num_workers=self.nb_workers,
             persistent_workers=self.persistent_workers,
+            worker_init_fn=self.worker_init_fn,
         )
 
 
