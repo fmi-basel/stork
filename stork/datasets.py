@@ -837,7 +837,7 @@ class RasDataset(SpikingDataset):
 
         times = times.long()
 
-        X = torch.zeros((self.nb_steps, self.nb_units))
+        X = torch.zeros((self.nb_steps, self.nb_units), dtype=self.dtype)
         X[times, units] = 1.0
         y = self.labels[index]
 
