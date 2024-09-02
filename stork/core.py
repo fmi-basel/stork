@@ -29,6 +29,12 @@ class NetworkNode(nn.Module):
         self.time_step = time_step
         self.device = device
         self.dtype = dtype
+        
+    def set_nb_steps(self, nb_steps):
+        self.nb_steps = nb_steps
 
     def remove_regularizers(self):
         self.regularizers = []
+
+    def set_dtype(self, dtype):
+        self.dtype = dtype

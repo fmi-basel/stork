@@ -48,6 +48,8 @@ class RecurrentSpikingModel(nn.Module):
         loss_stack=None,
         optimizer=None,
         optimizer_kwargs=None,
+        scheduler=None,
+        scheduler_kwargs=None,
         generator=None,
         time_step=1e-3,
         wandb=None,
@@ -95,7 +97,32 @@ class RecurrentSpikingModel(nn.Module):
         self.optimizer_class = optimizer
         self.optimizer_kwargs = optimizer_kwargs
         self.configure_optimizer(self.optimizer_class, self.optimizer_kwargs)
+        
+        self.scheduler_class = scheduler
+        self.scheduler_kwargs = scheduler_kwargs
+        self.configure_scheduler(self.scheduler_class, self.scheduler_kwargs)
+        
         self.to(self.device)
+        
+        
+    def set_nb_steps(self, nb_time_steps):
+        self.nb_time_steps = nb_time_steps
+        
+        # configure data generator
+        self.data_generator_.configure(
+            self.batch_size,
+            self.nb_time_steps,
+            self.nb_inputs,
+            self.time_step,
+            device=self.device,
+            dtype=self.dtype,
+        )
+        
+        for g in self.groups:
+            g.set_nb_steps(nb_time_steps)
+            
+        self.reset_states()
+
 
     def time_rescale(self, time_step=1e-3, batch_size=None):
         """Saves the model then re-configures it with the old hyper parameters, but the new timestep.
@@ -104,6 +131,8 @@ class RecurrentSpikingModel(nn.Module):
             self.batch_size = batch_size
         saved_state = self.state_dict()
         saved_optimizer = self.optimizer_instance
+        saved_scheduler = self.scheduler_instance
+
         self.nb_time_steps = int(self.nb_time_steps * self.time_step / time_step)
         self.configure(
             self.input_group,
@@ -113,10 +142,13 @@ class RecurrentSpikingModel(nn.Module):
             time_step=time_step,
             optimizer=self.optimizer_class,
             optimizer_kwargs=self.optimizer_kwargs,
+            scheduler=self.scheduler_class,
+            scheduler_kwargs=self.scheduler_kwargs,
             wandb=self.wandb,
         )
         # Commenting this out will re-init the optimizer
         self.optimizer_instance = saved_optimizer
+        self.scheduler_instance = saved_scheduler
         self.load_state_dict(saved_state)
 
     def configure_optimizer(self, optimizer_class, optimizer_kwargs):
@@ -126,6 +158,18 @@ class RecurrentSpikingModel(nn.Module):
             )
         else:
             self.optimizer_instance = optimizer_class(self.parameters())
+
+    def configure_scheduler(self, scheduler_class, scheduler_kwargs):
+        if scheduler_class is None:
+            self.scheduler_instance = None
+        else:
+            if scheduler_kwargs is not None:
+                self.scheduler_instance = scheduler_class(
+                    self.optimizer_instance, **scheduler_kwargs
+                )
+            else:
+                self.scheduler_instance = scheduler_class(self.optimizer_instance)
+
 
     def reconfigure(self):
         """Runs configure and replaces arguments with default from last run.
@@ -280,6 +324,9 @@ class RecurrentSpikingModel(nn.Module):
             self.optimizer_instance.step()
             self.apply_constraints()
 
+        if self.scheduler_instance is not None:
+            self.scheduler_instance.step()
+
         return np.mean(np.array(metrics), axis=0)
 
     def train_epoch(self, dataset, shuffle=True):
@@ -301,6 +348,9 @@ class RecurrentSpikingModel(nn.Module):
 
             self.optimizer_instance.step()
             self.apply_constraints()
+            
+        if self.scheduler_instance is not None:
+            self.scheduler_instance.step()
 
         return np.mean(np.array(metrics), axis=0)
 
@@ -313,6 +363,13 @@ class RecurrentSpikingModel(nn.Module):
         names = self.get_metric_names(prefix, postfix)
         for val, name in zip(metrics_array, names):
             s = s + " %s=%.3g" % (name, val)
+        return s
+
+    def get_metrics_dict(self, metrics_array, prefix="", postfix=""):
+        s = {}
+        names = self.get_metric_names(prefix, postfix)
+        for val, name in zip(metrics_array, names):
+            s[name] = val
         return s
 
     def get_metrics_history_dict(self, metrics_array, prefix="", postfix=""):
@@ -585,3 +642,34 @@ class RecurrentSpikingModel(nn.Module):
         print("\n## Connections")
         for con in self.connections:
             print(con)
+
+    
+    def set_dtype(self, dtype):
+        self.dtype = dtype
+        
+        for g in self.groups:
+            g.set_dtype(dtype)
+        for c in self.connections:
+            c.set_dtype(dtype)
+            
+        self.to(self.device)
+        return self
+    
+
+    def half(self):
+        """ 
+        Convert model to half precision. 
+        Because stork does not treat group states as parameters,
+        we have to convert the model to half precision manually.
+        """
+        
+        # Convert group states to half precision
+        for group in self.groups:
+            group.half()
+
+        # This will convert parameters to half precision
+        super().half()
+        
+        self.set_dtype(torch.float16)
+         
+        return self
