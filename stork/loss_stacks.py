@@ -24,8 +24,7 @@ class LossStack:
 
 
 class MaxOverTimeCrossEntropy(LossStack):
-
-    """ Readout stack that employs the max-over-time reduction strategy paired with categorical cross entropy. """
+    """Readout stack that employs the max-over-time reduction strategy paired with categorical cross entropy."""
 
     def __init__(self, time_dimension=1):
         super().__init__()
@@ -34,7 +33,7 @@ class MaxOverTimeCrossEntropy(LossStack):
         self.time_dim = time_dimension
 
     def acc_fn(self, log_p_y, target_labels):
-        """ Computes classification accuracy from log_p_y and corresponding target labels 
+        """Computes classification accuracy from log_p_y and corresponding target labels
 
         Args:
             log_p_y: The log softmax output (log p_y_given_x) of the model.
@@ -44,18 +43,19 @@ class MaxOverTimeCrossEntropy(LossStack):
             Float of mean classification accuracy.
         """
         _, pred_labels = torch.max(log_p_y, dim=self.time_dim)
-        a = (pred_labels == target_labels)
-        return ((1.0*a.cpu().numpy()).mean())
+        a = pred_labels == target_labels
+        return (1.0 * a.cpu().numpy()).mean()
 
     def get_metric_names(self):
         return ["acc"]
 
     def compute_loss(self, output, targets):
-        """ Computes crossentropy loss on softmax defined over maxpooling over time """
+        """Computes crossentropy loss on softmax defined over maxpooling over time"""
         ma, _ = torch.max(output, self.time_dim)  # reduce along time with max
         log_p_y = self.log_softmax(ma)
         loss_value = self.neg_log_likelihood_loss(
-            log_p_y, targets)  # compute supervised loss
+            log_p_y, targets
+        )  # compute supervised loss
         acc_val = self.acc_fn(log_p_y, targets)
         self.metrics = [acc_val.item()]
         return loss_value
@@ -74,10 +74,11 @@ class MaxOverTimeCrossEntropy(LossStack):
 
 
 class MaxOverTimeFocalLoss(LossStack):
+    """Readout stack that employs the max-over-time reduction strategy paired with focal loss."""
 
-    """ Readout stack that employs the max-over-time reduction strategy paired with focal loss. """
-
-    def __init__(self, gamma=0.0, eps=1e-7, samples_per_class=None, beta=0.99, time_dimension=1):
+    def __init__(
+        self, gamma=0.0, eps=1e-7, samples_per_class=None, beta=0.99, time_dimension=1
+    ):
         super().__init__()
         self.time_dim = time_dimension
         self.eps = eps
@@ -88,11 +89,10 @@ class MaxOverTimeFocalLoss(LossStack):
             eff_num = 1.0 - np.power(beta, samples_per_class)
             weights = (1.0 - beta) / np.array(eff_num)
             weights = weights / np.sum(weights) * len(samples_per_class)
-            print("weights: ", weights)
             self.weights = torch.tensor(weights).float()
 
     def acc_fn(self, log_p_y, target_labels):
-        """ Computes classification accuracy from log_p_y and corresponding target labels 
+        """Computes classification accuracy from log_p_y and corresponding target labels
 
         Args:
             log_p_y: The log softmax output (log p_y_given_x) of the model.
@@ -102,8 +102,8 @@ class MaxOverTimeFocalLoss(LossStack):
             Float of mean classification accuracy.
         """
         _, pred_labels = torch.max(log_p_y, dim=self.time_dim)
-        a = (pred_labels == target_labels)
-        return ((1.0*a.cpu().numpy()).mean())
+        a = pred_labels == target_labels
+        return (1.0 * a.cpu().numpy()).mean()
 
     def get_metric_names(self):
         return ["acc"]
@@ -126,7 +126,7 @@ class MaxOverTimeFocalLoss(LossStack):
             w = w.sum(1)
             w = w.unsqueeze(1)
             w = w.repeat(1, ma.size(-1))
-            loss = w*loss
+            loss = w * loss
 
         acc_val = self.acc_fn(logit, targets)
         self.metrics = [acc_val.item()]
@@ -146,8 +146,7 @@ class MaxOverTimeFocalLoss(LossStack):
 
 
 class SumOverTimeCrossEntropy(LossStack):
-
-    """ Loss stack that employs the sum-over-time reduction strategy paired with categorical cross entropy. """
+    """Loss stack that employs the sum-over-time reduction strategy paired with categorical cross entropy."""
 
     def __init__(self, time_dimension=1):
         super().__init__()
@@ -156,7 +155,7 @@ class SumOverTimeCrossEntropy(LossStack):
         self.time_dim = time_dimension
 
     def acc_fn(self, log_p_y, target_labels):
-        """ Computes classification accuracy from log_p_y and corresponding target labels 
+        """Computes classification accuracy from log_p_y and corresponding target labels
 
         Args:
             log_p_y: The log softmax output (log p_y_given_x) of the model.
@@ -166,18 +165,19 @@ class SumOverTimeCrossEntropy(LossStack):
             Float of mean classification accuracy.
         """
         _, pred_labels = torch.max(log_p_y, dim=self.time_dim)
-        a = (pred_labels == target_labels)
-        return ((1.0*a.cpu().numpy()).mean())
+        a = pred_labels == target_labels
+        return (1.0 * a.cpu().numpy()).mean()
 
     def get_metric_names(self):
         return ["acc"]
 
     def compute_loss(self, output, targets):
-        """ Computes crossentropy loss on softmax defined over sum over time """
+        """Computes crossentropy loss on softmax defined over sum over time"""
         su = torch.sum(output, self.time_dim)  # reduce along time with sum
         log_p_y = self.log_softmax(su)
         loss_value = self.neg_log_likelihood_loss(
-            log_p_y, targets)  # compute supervised loss
+            log_p_y, targets
+        )  # compute supervised loss
         acc_val = self.acc_fn(log_p_y, targets)
         self.metrics = [acc_val.item()]
         return loss_value
@@ -196,7 +196,7 @@ class SumOverTimeCrossEntropy(LossStack):
 
 
 class LastStepCrossEntropy(LossStack):
-    """ Computes crossentropy loss on last time frame of the network """
+    """Computes crossentropy loss on last time frame of the network"""
 
     def __init__(self):
         super().__init__()
@@ -204,7 +204,7 @@ class LastStepCrossEntropy(LossStack):
         self.neg_log_likelihood_loss = nn.NLLLoss()
 
     def acc_fn(self, log_p_y, target_labels):
-        """ Computes classification accuracy from log_p_y and corresponding target labels 
+        """Computes classification accuracy from log_p_y and corresponding target labels
 
         Args:
             log_p_y: The log softmax output (log p_y_given_x) of the model.
@@ -214,17 +214,18 @@ class LastStepCrossEntropy(LossStack):
             Float of mean classification accuracy.
         """
         _, pred_labels = torch.max(log_p_y, dim=1)
-        a = (pred_labels == target_labels)
-        return (a.cpu().numpy().mean())
+        a = pred_labels == target_labels
+        return a.cpu().numpy().mean()
 
     def get_metric_names(self):
         return ["acc"]
 
     def compute_loss(self, output, targets):
-        """ Computes crossentropy loss on softmax defined over maxpooling over time """
+        """Computes crossentropy loss on softmax defined over maxpooling over time"""
         log_p_y = self.log_softmax(output[:, -1])
         loss_value = self.neg_log_likelihood_loss(
-            log_p_y, targets)  # compute supervised loss
+            log_p_y, targets
+        )  # compute supervised loss
         acc_val = self.acc_fn(log_p_y, targets)
         self.metrics = [acc_val.item()]
         return loss_value
@@ -242,7 +243,7 @@ class LastStepCrossEntropy(LossStack):
 
 
 class EveryStepCrossEntropy(LossStack):
-    """ Computes crossentropy loss on every time frame of the network """
+    """Computes crossentropy loss on every time frame of the network"""
 
     def __init__(self):
         super().__init__()
@@ -250,7 +251,7 @@ class EveryStepCrossEntropy(LossStack):
         self.neg_log_likelihood_loss = nn.NLLLoss()
 
     def acc_fn(self, log_p_y, target_labels):
-        """ Computes classification accuracy from log_p_y and corresponding target labels 
+        """Computes classification accuracy from log_p_y and corresponding target labels
 
         Args:
             log_p_y: The log softmax output (log p_y_given_x) of the model.
@@ -260,17 +261,18 @@ class EveryStepCrossEntropy(LossStack):
             Float of mean classification accuracy.
         """
         _, pred_labels = torch.max(log_p_y, dim=1)
-        a = (pred_labels == target_labels)
-        return (a.cpu().numpy().mean())
+        a = pred_labels == target_labels
+        return a.cpu().numpy().mean()
 
     def get_metric_names(self):
         return ["acc"]
 
     def compute_loss(self, output, targets):
-        """ Computes crossentropy loss on softmax defined over maxpooling over time """
+        """Computes crossentropy loss on softmax defined over maxpooling over time"""
         log_p_y = self.log_softmax(output)
         loss_value = self.neg_log_likelihood_loss(
-            log_p_y, targets)  # compute supervised loss
+            log_p_y, targets
+        )  # compute supervised loss
         acc_val = self.acc_fn(log_p_y, targets)
         self.metrics = [acc_val.item()]
         return loss_value
@@ -290,7 +292,7 @@ class EveryStepCrossEntropy(LossStack):
 class MeanSquareError(LossStack):
 
     def __init__(self, mask=None):
-        """ 
+        """
         Args:
 
             mask: A ``don't-care'' mask which can be aplied to part of the output
@@ -303,12 +305,14 @@ class MeanSquareError(LossStack):
         return []
 
     def compute_loss(self, output, target):
-        """ Computes MSQE loss between output and target. """
+        """Computes MSQE loss between output and target."""
         if self.mask is None:
             loss_value = self.msqe_loss(output, target)
         else:
             loss_value = self.msqe_loss(
-                output*self.mask.expand_as(output), target*self.mask.expand_as(output))
+                output * self.mask.expand_as(output),
+                target * self.mask.expand_as(output),
+            )
         self.metrics = []
         return loss_value
 
@@ -320,17 +324,101 @@ class MeanSquareError(LossStack):
 
 
 class DictMeanSquareError(MeanSquareError):
-    """ Like MeanSquareError, but uses a dictionary of possible output
-    patterns which can be kept in the GPU memory. """
+    """Like MeanSquareError, but uses a dictionary of possible output
+    patterns which can be kept in the GPU memory."""
 
     def __init__(self, target_patterns, mask=None):
         super().__init__(mask)
         self.dict_ = target_patterns
 
     def compute_loss(self, output, targets):
-        """ Computes MSQE loss between output and target. """
+        """Computes MSQE loss between output and target."""
         local_targets = [self.dict_[idx] for idx in targets]
         return super().compute_loss(output, torch.stack(local_targets, dim=0))
 
     def __call__(self, output, targets):
         return self.compute_loss(output, targets)
+
+
+class SumOfSoftmaxCrossEntropy(LossStack):
+    """
+    Readout stack that computes softmax across neurons at each time point,
+    sums over time and then applies the cross-entropy loss.
+    """
+
+    def __init__(self, time_dimension=1):
+        super().__init__()
+        self.neg_log_likelihood_loss = nn.NLLLoss()
+        self.time_dim = time_dimension
+        self.log_softmax = nn.LogSoftmax(dim=1)
+        self.softmax = nn.Softmax(
+            dim=-1
+        )  # Across units in [batch x time x units] output
+
+    def acc_fn(self, log_p_y, target_labels):
+        """Computes classification accuracy from log_p_y and corresponding target labels
+
+        Args:
+            log_p_y: The log softmax output (log p_y_given_x) of the model.
+            target_labels: The integer target labels (not one hot encoding).
+
+        Returns:
+            Float of mean classification accuracy.
+        """
+        _, pred_labels = torch.max(log_p_y, dim=self.time_dim)
+        a = pred_labels == target_labels
+        return (1.0 * a.cpu().numpy()).mean()
+
+    def get_metric_names(self):
+        return ["acc"]
+
+    def compute_loss(self, output, targets):
+        """Computes crossentropy loss on sum of softmax over neurons at each time point"""
+        # Softmax at every timesteps
+        p_y_t = self.softmax(output)  # [batch x time x n_classes]
+        su = torch.sum(p_y_t, self.time_dim)  # Should be batch x n_classes
+        log_p_y = self.log_softmax(su)  # Should be batch x n_classes
+        loss_value = self.neg_log_likelihood_loss(
+            log_p_y, targets
+        )  # compute supervised loss
+        acc_val = self.acc_fn(log_p_y, targets)
+        self.metrics = [acc_val.item()]
+        return loss_value
+
+    def log_py_given_x(self, output):
+        p_y_t = self.softmax(output)  # [batch x time x n_classes]
+        su = torch.sum(p_y_t, self.time_dim)  # Should be batch x n_classes
+        log_p_y = self.log_softmax(su)  # Should be batch x n_classes
+        return log_p_y
+
+    def predict(self, output):
+        _, pred_labels = torch.max(self.log_py_given_x(output), dim=1)
+        return pred_labels
+
+    def __call__(self, output, targets):
+        return self.compute_loss(output, targets)
+
+
+class MeanOfSoftmaxCrossEntropy(SumOfSoftmaxCrossEntropy):
+
+    def __init__(self, time_dimension=1):
+        super().__init__(time_dimension)
+
+    def compute_loss(self, output, targets):
+        """Computes crossentropy loss on sum of softmax over neurons at each time point"""
+        # Softmax at every timesteps
+        p_y_t = self.softmax(output)  # [batch x time x n_classes]
+        su = torch.mean(p_y_t, self.time_dim)  # Should be batch x n_classes
+        log_p_y = self.log_softmax(su)  # Should be batch x n_classes
+        loss_value = self.neg_log_likelihood_loss(
+            log_p_y, targets
+        )  # compute supervised loss
+        acc_val = self.acc_fn(log_p_y, targets)
+        self.metrics = [acc_val.item()]
+        return loss_value
+
+    def log_py_given_x(self, output):
+        p_y_t = self.softmax(output)  # [batch x time x n_classes]
+        su = torch.mean(p_y_t, self.time_dim)  # Should be batch x n_classes
+        log_p_y = self.log_softmax(su)  # Should be batch x n_classes
+        return log_p_y
