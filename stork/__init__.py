@@ -16,3 +16,5 @@ from . import utils
 from . import nodes
 
 __version__ = "0.1.0"
+
+print("using delay stork version - filter cascades")
