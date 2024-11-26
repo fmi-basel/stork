@@ -76,6 +76,13 @@ class DelayGroup(CellGroup):
     def reset_parameters(self):
         # initializes learnable delays
         self.delays = Parameter(torch.rand(self.shape)*self.max_delay_timesteps, requires_grad=True)
+        
+    def configure(self, batch_size, nb_steps, time_step, device, dtype):
+        
+        self.delays = self.delays.to(device=device, dtype=dtype)
+        self.to(device=device, dtype=dtype)
+        
+        return super().configure(batch_size, nb_steps, time_step, device, dtype)
 
     def reset_state(self, batch_size=None):
         super().reset_state(batch_size)
