@@ -20,6 +20,7 @@ class SGQuantization(torch.autograd.Function):
         """
         ctx.save_for_backward(input)
         out = torch.round(input.clip(0)).long()
+        print("activation", torch.sum(out))
         return out
 
     @staticmethod
@@ -33,6 +34,7 @@ class SGQuantization(torch.autograd.Function):
         """
         (input,) = ctx.saved_tensors
         grad_input = torch.heaviside(input, 0.0)
+        print("grad", torch.sum(grad_output * grad_input))
         return grad_output * grad_input
 
 
