@@ -41,7 +41,7 @@ class DelayGroup(CellGroup):
     Essentially a wrapper of src.out of a neuron (e.g. LIF) group that implements
     a delay buffer. Delays are per-neuron and learnable (i.e. trainable) parameters.
     """
-    
+
     def __init__(
         self,
         src,
@@ -61,43 +61,43 @@ class DelayGroup(CellGroup):
             dropout_p,
             stateful,
         )
-        
+
+        self.src = src
         self.max_delay_timesteps = max_delay_timesteps
-        
+
         # precompute indices
         self.neuron_indices = torch.arange(src.shape[-1])
-        
+
         # init parameters (delay per neuron)
-        self.reset_parameters()  
-                       
+        self.reset_parameters()
+
     def reset_parameters(self):
         # initializes learnable delays
-        self.delays = Parameter(torch.uniform(0.0, self.max_delay_timesteps, 
-                                              self.shape))
-    
+        self.delays = Parameter(torch.rand(self.shape)*self.max_delay_timesteps, requires_grad=True)
+
     def reset_state(self, batch_size=None):
         super().reset_state(batch_size)
 
         self.out = self.states["out"] = torch.zeros(self.int_shape, device=self.device, dtype=self.dtype)
-        
+
         self.buffer_shape = (self.max_delay_timesteps,) + self.int_shape
         self.buffer = self.states['buffer'] =torch.zeros(self.buffer_shape, device=self.device, dtype=self.dtype)
-        
+
         # convert float delays to integer indices
         self.delay_indices = SGQuantization.apply(self.delays)
-        
-        
+
+
     def forward(self):
-        
+
         # update bufer
         self.buffer[self.clk % self.max_delay_timesteps] = self.src.out
-        
+
         # compute valid neurons
         valid_neurons = self.delay_indices <= self.clk
-        
+
         # Init output tensor with zeros
         self.out = self.states["out"] = torch.zeros(self.int_shape, device=self.device, dtype=self.dtype)
-        
+
         if valid_neurons.any():
            # Compute buffer indices for all neurons
             buffer_indices = (self.clk - self.delay_indices) % self.max_delay_timesteps  # Shape: [N_neurons]
@@ -114,5 +114,4 @@ class DelayGroup(CellGroup):
 
             # Assign to output
             self.out = self.states["out"] = delayed_data
-            
-            
+
