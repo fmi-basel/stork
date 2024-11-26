@@ -19,8 +19,7 @@ class SGQuantization(torch.autograd.Function):
         that is used to stash information for backward pass computations.
         """
         ctx.save_for_backward(input)
-        out = torch.round(input.clip(0)).long()
-        print("activation", torch.sum(out))
+        out = torch.clamp(torch.round(input), 0).long()
         return out
 
     @staticmethod
@@ -67,6 +66,8 @@ class DelayGroup(CellGroup):
         self.src = src
         self.max_delay_timesteps = max_delay_timesteps
 
+        self.delay_nl = SGQuantization.apply
+
         # precompute indices
         self.neuron_indices = torch.arange(src.shape[-1])
 
@@ -75,28 +76,35 @@ class DelayGroup(CellGroup):
 
     def reset_parameters(self):
         # initializes learnable delays
-        self.delays = Parameter(torch.rand(self.shape)*self.max_delay_timesteps, requires_grad=True)
-        
+        self.delays = Parameter(
+            torch.rand(self.shape) * self.max_delay_timesteps, requires_grad=True
+        )
+
+        # self.delays = Parameter(torch.ones(self.shape) * 5, requires_grad=True)
+        pass
+
     def configure(self, batch_size, nb_steps, time_step, device, dtype):
-        
+
         self.delays = self.delays.to(device=device, dtype=dtype)
         self.to(device=device, dtype=dtype)
-        
+
         return super().configure(batch_size, nb_steps, time_step, device, dtype)
 
     def reset_state(self, batch_size=None):
         super().reset_state(batch_size)
 
-        self.out = self.states["out"] = torch.zeros(self.int_shape, device=self.device, dtype=self.dtype)
-
         self.buffer_shape = (self.max_delay_timesteps,) + self.int_shape
-        self.buffer = self.states['buffer'] =torch.zeros(self.buffer_shape, device=self.device, dtype=self.dtype)
+        self.buffer = self.states["buffer"] = torch.zeros(
+            self.buffer_shape, device=self.device, dtype=self.dtype
+        )
 
-        # convert float delays to integer indices
-        self.delay_indices = SGQuantization.apply(self.delays)
-
+        self.out = self.states["out"] = torch.zeros(
+            self.int_shape, device=self.device, dtype=self.dtype, requires_grad=True
+        )
 
     def forward(self):
+        # convert float delays to integer indices
+        self.delay_indices = self.delay_nl(self.delays)
 
         # update bufer
         self.buffer[self.clk % self.max_delay_timesteps] = self.src.out
@@ -105,15 +113,21 @@ class DelayGroup(CellGroup):
         valid_neurons = self.delay_indices <= self.clk
 
         # Init output tensor with zeros
-        self.out = self.states["out"] = torch.zeros(self.int_shape, device=self.device, dtype=self.dtype)
+        self.out = self.states["out"] = torch.zeros(
+            self.int_shape, device=self.device, dtype=self.dtype
+        )
 
         if valid_neurons.any():
-           # Compute buffer indices for all neurons
-            buffer_indices = (self.clk - self.delay_indices) % self.max_delay_timesteps  # Shape: [N_neurons]
+            # Compute buffer indices for all neurons
+            buffer_indices = (
+                self.clk - self.delay_indices
+            ) % self.max_delay_timesteps  # Shape: [N_neurons]
 
             # Gather the delayed data for all neurons
             # Indexing over the first and third dimensions
-            delayed_data = self.buffer[buffer_indices, :, self.neuron_indices]  # Shape: [N_neurons, N_batch]
+            delayed_data = self.buffer[
+                buffer_indices, :, self.neuron_indices
+            ]  # Shape: [N_neurons, N_batch]
 
             # Transpose to get shape [N_batch, N_neurons]
             delayed_data = delayed_data.transpose(0, 1)  # Shape: [N_batch, N_neurons]
