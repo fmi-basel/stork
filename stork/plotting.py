@@ -242,7 +242,11 @@ def plot_activity_snapshot(
                 color="black",
                 jitter=time_jitter,
             )
-            ax.axis("off")
+            # ax.axis("off")
+            ax.set_xlabel("")
+            ax.set_ylabel("")
+            ax.set_xticks([])
+            ax.set_yticks([])
             if i == 0:
                 label = "Hidden"
                 if hidden_groups[h].name is not None:
