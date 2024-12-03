@@ -66,7 +66,7 @@ class SGQuantization(torch.autograd.Function):
         (input,) = ctx.saved_tensors
         grad_input = input > 0
         # print("backward")
-        return None, grad_output * grad_input, None, None, None, None
+        return None, grad_output * grad_input * -1, None, None, None, None
 
 
 class DelayGroup(CellGroup):
