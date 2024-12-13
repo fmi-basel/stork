@@ -30,7 +30,6 @@ class SGQuantization(torch.autograd.Function):
         Returns:
             _type_: _description_
         """
-        ctx.save_for_backward(delays)
 
         # convert float delays to integer indices
         delay_indices = torch.clamp(torch.round(delays), 0).long()
@@ -57,15 +56,17 @@ class SGQuantization(torch.autograd.Function):
             delayed_data[:, ~valid_neurons] = 0  # Invalid neurons set to zero
 
         # print("forward")
+        ctx.save_for_backward(delays, delayed_data)
+
         return delayed_data
 
     @staticmethod
     def backward(ctx, grad_output):
         """Here we provide a backward for the quantized delay. We assume, the forward is a coarse relu function,
         hence the backward would be the derivative of a relu."""
-        (input,) = ctx.saved_tensors
-        grad_input = input > 0
-        # print("backward")
+        (delays, delayed_data) = ctx.saved_tensors
+        grad_input = (delays > 0) * delayed_data
+
         return None, grad_output * grad_input * -1, None, None, None, None
 
 

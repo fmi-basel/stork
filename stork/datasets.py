@@ -918,6 +918,82 @@ class RasDataset(SpikingDataset):
         return X, y
 
 
+class RasRasDataset(SpikingDataset):
+    def __init__(
+        self,
+        dataset,
+        nb_steps,
+        nb_units,
+        target_units,
+        p_drop=0.0,
+        p_insert=0.0,
+        sigma_t=0.0,
+        time_scale=1,
+    ):
+        """
+        Args:
+            dataset: (data,labels) tuple where data is in RAS format
+            p_drop: Probability of dropping a spike (default 0)
+            p_insert: Probability of inserting a spurious spike in any time cell (default 0)
+            sigma_t: Amplitude of time jitter added to each spike in bins (default 0)
+            time_scale: Rescales the time-dimension (second dimension) of the dataset used to adjust to discrete time grid.
+        """
+        super().__init__(
+            nb_steps,
+            nb_units,
+            p_drop=p_drop,
+            p_insert=p_insert,
+            sigma_t=sigma_t,
+            time_scale=time_scale,
+        )
+
+        self.nb_target_units = target_units
+
+        data, labels = dataset
+
+        if self.time_scale == 1:
+            Xscaled = data
+            Yscaled = labels
+        else:
+            Xscaled = []
+            for times, units in data:
+                times = self.time_scale * times
+                idx = times < self.nb_steps
+                Xscaled.append((times[idx], units[idx]))
+            for times, units in labels:
+                times = self.time_scale * times
+                idx = times < self.nb_steps
+                Yscaled.append((times[idx], units[idx]))
+
+        self.data = Xscaled
+        self.labels = Yscaled
+
+    def __len__(self):
+        "Returns the total number of samples in dataset"
+        return len(self.data)
+
+    def __getitem__(self, index):
+        "Returns one sample of data"
+
+        times, units = self.data[index]
+        times, units = self.preprocess_events(times, units)
+
+        times = times.long()
+
+        X = torch.zeros((self.nb_steps, self.nb_units))
+        X[times, units] = 1.0
+
+        timesy, unitsy = self.labels[index]
+        timesy, unitsy = self.preprocess_events(timesy, unitsy)
+
+        timesy = timesy.long()
+
+        Y = torch.zeros((self.nb_steps, self.nb_target_units))
+        Y[timesy, unitsy] = 1.0
+
+        return X, Y
+
+
 class TextToRasDataset(RasDataset):
     def __init__(
         self,
