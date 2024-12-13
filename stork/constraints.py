@@ -27,3 +27,18 @@ class MinMaxConstraint(WeightConstraint):
         with torch.no_grad():
             torch.clamp_(weight, min=self.min, max=self.max)
 
+class AssemblyConstraint(WeightConstraint):
+    def __init__(self, mask):
+        """ Implements an AssemblyStructured constraint for connection weights.
+
+        Args:
+            weight: The weight to apply the constraint to
+            mask:  binary mask with the structure
+        """
+        super().__init__()
+        self.mask = mask
+
+    def apply(self, weight):
+        with torch.no_grad():
+            torch.mask(weight, self.mask)
+
