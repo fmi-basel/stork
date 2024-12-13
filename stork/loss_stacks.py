@@ -4,6 +4,8 @@ import torch.nn.functional as F
 
 import numpy as np
 
+import matplotlib.pyplot as plt
+
 
 class LossStack:
 
@@ -306,6 +308,7 @@ class MeanSquareError(LossStack):
 
     def compute_loss(self, output, target):
         """Computes MSQE loss between output and target."""
+
         if self.mask is None:
             loss_value = self.msqe_loss(output, target)
         else:
@@ -314,6 +317,7 @@ class MeanSquareError(LossStack):
                 target * self.mask.expand_as(output),
             )
         self.metrics = []
+
         return loss_value
 
     def predict(self, output):
@@ -321,6 +325,79 @@ class MeanSquareError(LossStack):
 
     def __call__(self, output, targets):
         return self.compute_loss(output, targets)
+
+
+class vRD_MeanSquareError(MeanSquareError):
+
+    def __init__(self, kernel, mask=None):
+        """
+        Args:
+
+            mask: A ``don't-care'' mask which can be aplied to part of the output
+        """
+        super().__init__(mask)
+        self.kernel = kernel
+
+    def vanRossum(self, signal):
+        """
+        Convolve the input signal with the van Rossum kernel along the time axis.
+
+        Args:
+            signal (torch.Tensor): Input tensor of shape (batch, time, neuron).
+
+        Returns:
+            torch.Tensor: Convolved signal with the same shape as input.
+        """
+        # Reshape kernel for convolution
+        kernel = self.kernel.reshape(1, 1, -1)  # Shape: (1, 1, kernel_size)
+
+        # Permute signal to match convolution requirements
+        # (batch, time, neuron) -> (batch * neuron, 1, time)
+        batch, time, neuron = signal.shape
+        signal = signal.permute(0, 2, 1).reshape(-1, 1, time)
+
+        # Apply convolution (valid padding to ensure no boundary effects)
+        convolved = F.conv1d(signal, kernel, padding=0, groups=1)  # Output shape: (batch * neuron, 1, time - kernel_size + 1)
+
+        # Pad the result to match the input length (same as "full" convolution mode)
+        padding = self.kernel.size(0) - 1  # Padding needed to match original time dimension
+        convolved = F.pad(convolved, (padding, 0), mode='constant', value=0)
+
+        # Reshape back to original dimensions
+        convolved = convolved.view(batch, neuron, -1).permute(0, 2, 1)  # (batch, neuron, time) -> (batch, time, neuron)
+
+        return convolved
+
+    def compute_loss(self, output, target):
+        """Computes MSQE loss between output and target."""
+
+        c_output = self.vanRossum(output)
+        c_target = self.vanRossum(target)
+
+        if self.mask is None:
+            loss_value = self.msqe_loss(c_output, c_target)
+        else:
+            loss_value = self.msqe_loss(
+                c_output * self.mask.expand_as(c_output),
+                c_target * self.mask.expand_as(c_output),
+            )
+        self.metrics = []
+        # plt.plot(c_output.squeeze().detach().cpu().numpy())
+        # plt.plot(c_target.squeeze().detach().cpu().numpy())
+        # plt.plot(
+        #     c_output.squeeze().detach().cpu().numpy()
+        #     - c_target.squeeze().detach().cpu().numpy()
+        # )
+        # plt.plot(
+        #     (
+        #         c_output.squeeze().detach().cpu().numpy()
+        #         - c_target.squeeze().detach().cpu().numpy()
+        #     )
+        #     ** 2
+        # )
+        # plt.ylim(-0.2, 0.3)
+        plt.show()
+        return loss_value
 
 
 class DictMeanSquareError(MeanSquareError):
