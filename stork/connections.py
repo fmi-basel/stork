@@ -37,7 +37,7 @@ class BaseConnection(core.NetworkNode):
 
         if constraints is None:
             self.constraints = []
-        elif type(constraints) == list:
+        elif isinstance(constraints, list):
             self.constraints = constraints
         elif issubclass(type(constraints), stork_constraints.WeightConstraint):
             self.constraints = [constraints]
@@ -101,7 +101,7 @@ class Connection(BaseConnection):
         super().configure(batch_size, nb_steps, time_step, device, dtype)
 
     def add_diagonal_structure(self, width=1.0, ampl=1.0):
-        if type(self.op) != nn.Linear:
+        if not isinstance(self.op, nn.Linear):
             raise ValueError("Expected op to be nn.Linear to add diagonal structure.")
         A = np.zeros(self.op.weight.shape)
         x = np.linspace(0, A.shape[0], A.shape[1])

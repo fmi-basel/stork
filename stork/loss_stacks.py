@@ -8,7 +8,6 @@ import matplotlib.pyplot as plt
 
 
 class LossStack:
-
     def __init__(self):
         pass
 
@@ -292,7 +291,6 @@ class EveryStepCrossEntropy(LossStack):
 
 
 class MeanSquareError(LossStack):
-
     def __init__(self, mask=None):
         """
         Args:
@@ -308,7 +306,6 @@ class MeanSquareError(LossStack):
 
     def compute_loss(self, output, target):
         """Computes MSQE loss between output and target."""
-
         if self.mask is None:
             loss_value = self.msqe_loss(output, target)
         else:

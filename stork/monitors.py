@@ -1,7 +1,7 @@
 import torch
 
 
-class Monitor():
+class Monitor:
     def __init__(self):
         self.reset()
 
@@ -16,13 +16,13 @@ class Monitor():
 
 
 class SpikeMonitor(Monitor):
-    """ Records spikes in sparse RAS format 
+    """Records spikes in sparse RAS format
 
     Args:
-        group: The group to record from 
+        group: The group to record from
 
     Returns:
-        argwhere of out sequence 
+        argwhere of out sequence
     """
 
     def __init__(self, group):
@@ -45,11 +45,11 @@ class SpikeMonitor(Monitor):
 
 
 class StateMonitor(Monitor):
-    """ Records the state of a neuron group over time
+    """Records the state of a neuron group over time
 
     Args:
-        group: The group to record from 
-        key: The name of the state 
+        group: The group to record from
+        key: The name of the state
     """
 
     def __init__(self, group, key, subset=None):
@@ -63,8 +63,7 @@ class StateMonitor(Monitor):
 
     def execute(self):
         if self.subset is not None:
-            self.data.append(
-                self.group.states[self.key][:, self.subset].detach().cpu())
+            self.data.append(self.group.states[self.key][:, self.subset].detach().cpu())
         else:
             self.data.append(self.group.states[self.key].detach().cpu())
 
@@ -73,10 +72,10 @@ class StateMonitor(Monitor):
 
 
 class SpikeCountMonitor(Monitor):
-    """ Counts number of spikes (sum over time in get_out_sequence() for each neuron)
+    """Counts number of spikes (sum over time in get_out_sequence() for each neuron)
 
     Args:
-        group: The group to record from 
+        group: The group to record from
 
     Returns:
         A tensor with spike counts for each input and neuron
@@ -97,10 +96,10 @@ class SpikeCountMonitor(Monitor):
 
 
 class PopulationSpikeCountMonitor(Monitor):
-    """ Counts total number of spikes (sum over time in get_out_sequence() for the group)
+    """Counts total number of spikes (sum over time in get_out_sequence() for the group)
 
     Args:
-        group: The group to record from 
+        group: The group to record from
 
     Returns:
         A tensor with spike counts for each input and neuron
@@ -122,10 +121,10 @@ class PopulationSpikeCountMonitor(Monitor):
 
 
 class PopulationFiringRateMonitor(Monitor):
-    """ Monitors population firing rate (nr of spikes / nr of neurons for every timestep)
+    """Monitors population firing rate (nr of spikes / nr of neurons for every timestep)
 
     Args:
-        group: The group to record from 
+        group: The group to record from
 
     Returns:
         A tensor with population firing rate for each input and timestep
@@ -148,10 +147,10 @@ class PopulationFiringRateMonitor(Monitor):
 
 
 class MeanVarianceMonitor(Monitor):
-    """ Measures mean and variance of input
+    """Measures mean and variance of input
 
     Args:
-        group: The group to record from 
+        group: The group to record from
         state (string): State variable to monitor (Monitors mean and variance of a state variable)
 
 
@@ -176,16 +175,16 @@ class MeanVarianceMonitor(Monitor):
         self.c += 1
 
     def get_data(self):
-        mean = self.s/self.c
-        var = self.s2/self.c - mean**2
+        mean = self.s / self.c
+        var = self.s2 / self.c - mean**2
         return torch.stack((mean, var), len(mean.shape))
 
 
 class GradientMonitor(Monitor):
-    """ Records the gradients (weight.grad)
+    """Records the gradients (weight.grad)
 
     Args:
-        target: The tensor or nn.Module to record from 
+        target: The tensor or nn.Module to record from
                 (usually a stork.connection.op object)
                 Needs to have a .weight argument
     """
@@ -215,11 +214,11 @@ class GradientMonitor(Monitor):
 
 
 class GradientOutputMonitor(GradientMonitor):
-    """ Records the gradients wrt the neuronal output 
+    """Records the gradients wrt the neuronal output
         computed in the backward pass
 
     Args:
-        target: The tensor or nn.Module to record from 
+        target: The tensor or nn.Module to record from
                 (usually a stork.connection.op object)
     """
 

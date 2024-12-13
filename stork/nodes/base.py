@@ -145,5 +145,10 @@ class CellGroup(core.NetworkNode):
     def get_out_channels(self):
         return self.shape[0]
 
+    def half(self):
+        """ Convert all states to half precision """
+        for key in self.states:
+            self.states[key] = self.states[key].to(dtype=torch.float16)
+                
     def __call__(self, inputs):
         raise NotImplementedError

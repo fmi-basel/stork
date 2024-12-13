@@ -11,7 +11,7 @@ Furthermore, stork uses per default initialization in the fluctuation-driven reg
 
 If you find this library useful and use it for your research projects, please cite
 
-<a href="https://iopscience.iop.org/article/10.1088/2634-4386/ac97bb">Rossbroich>, J., Gygax, J., and Zenke, F. (2022).  
+<a href="https://iopscience.iop.org/article/10.1088/2634-4386/ac97bb">Rossbroich, J., Gygax, J., and Zenke, F. (2022).  
 Fluctuation-driven initialization for spiking neural network training.  
 Neuromorph. Comput. Eng.  </a>
 
@@ -58,3 +58,7 @@ The `examples` directory contains notebooks and Python scripts that contain exam
 - **[03_Deep_ConvSNN_SHD](examples/03_Deep_ConvSNN_SHD.ipynb):** Here we provide an example of a deep recurrent convolutional SNN on the SHD dataset. This example will introduce the use of [layer](stork/layers.py) to create convolutional layers.
 - **[04_DalesLaw_SNN_SHD](examples/04_DalesLaw_SNN_SHD.ipynb):** This notebook demonstrates how to implement a Dalian network, meaning networks with separate populations of excitatory and inhibitory neurons (i.e. the synaptic connections are sign constrained), by using the `DalianLayer` class from the [layer](stork/layers.py) module.
 - **[05_Deep_ConvSNN_DVS-Gestures](examples/05_Deep_ConvSNN_DVS-Gestures.ipynb):** Similar to **[03_Deep_ConvSNN_SHD](examples/03_Deep_ConvSNN_SHD.ipynb):**, but for the [DVS128 Gesture](https://research.ibm.com/interactive/dvsgesture/) dataset.
+
+
+## Funding
+The development of Stork was supported by the Swiss National Science Foundation [grant number PCEFP3_202981].

@@ -19,11 +19,12 @@ def _get_epsilon(calc_mode, tau_mem, tau_syn=None, timestep=1e-3):
     if calc_mode == 'analytical':
         return _epsilon_analytical(tau_mem, tau_syn)
 
-    elif calc_mode == 'numerical':
+    elif calc_mode == "numerical":
         return _epsilon_numerical(tau_mem, tau_syn, timestep)
 
     else:
-        raise ValueError('invalid calc mode for epsilon')
+        raise ValueError("invalid calc mode for epsilon")
+
 
 def _epsilon_analytical(tau_mem, tau_syn=None):
     if tau_syn is None:
@@ -34,9 +35,10 @@ def _epsilon_analytical(tau_mem, tau_syn=None):
         return epsilon_bar, epsilon_hat
 
     epsilon_bar = tau_syn
-    epsilon_hat = (tau_syn ** 2) / (2 * (tau_syn + tau_mem))
+    epsilon_hat = (tau_syn**2) / (2 * (tau_syn + tau_mem))
 
     return epsilon_bar, epsilon_hat
+
 
 def _epsilon_numerical(tau_mem, tau_syn, timestep):
     kernel = get_lif_kernel(tau_mem, tau_syn, timestep)
@@ -45,23 +47,26 @@ def _epsilon_numerical(tau_mem, tau_syn, timestep):
 
     return epsilon_bar, epsilon_hat
 
+
 # CLASSES
 # # # # # # # # # #
 
-class Initializer():
+
+class Initializer:
     """
     Abstract Base Class for Initializer Objects.
     """
 
-    def __init__(self, scaling='1/sqrt(k)', sparseness=1.0, bias_scale=1.0, bias_mean=0.0):
-
+    def __init__(
+        self, scaling="1/sqrt(k)", sparseness=1.0, bias_scale=1.0, bias_mean=0.0, dtype=torch.float32
+    ):
         self.scaling = scaling
         self.sparseness = sparseness
         self.bias_scale = bias_scale
         self.bias_mean = bias_mean
+        self.dtype = dtype
 
     def initialize(self, target):
-
         if isinstance(target, connections.BaseConnection):
             self.initialize_connection(target)
 
@@ -70,7 +75,8 @@ class Initializer():
 
         else:
             raise TypeError(
-                "Target object is unsupported. must be Connection or Layer instance.")
+                "Target object is unsupported. must be Connection or Layer instance."
+            )
 
     def initialize_layer(self, layer):
         """
@@ -97,7 +103,6 @@ class Initializer():
             return weights
 
         elif self.scaling == "1/sqrt(k)":
-
             return weights / math.sqrt(fan_in)
 
         elif self.scaling == "1/k":
@@ -147,7 +152,7 @@ class Initializer():
 
         # set weights
         with torch.no_grad():
-            connection.op.weight.data = weights
+            connection.op.weight.data = weights.type(self.dtype)
 
     def _set_biases(self, connection):
         """
@@ -155,12 +160,15 @@ class Initializer():
         """
         if connection.op.bias is not None:
             fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(
-                connection.op.weight)
+                connection.op.weight
+            )
             bound = self.bias_scale / np.sqrt(fan_in)
 
             with torch.no_grad():
-                connection.op.bias.uniform_(-bound+self.bias_mean,
-                                      bound+self.bias_mean)
+                connection.op.bias.uniform_(
+                    -bound + self.bias_mean, bound + self.bias_mean
+                )
+                connection.op.bias.data = connection.op.bias.data.type(self.dtype)
 
     def _get_weights(self, *params):
         raise NotImplementedError
@@ -171,15 +179,13 @@ class DistInitializer(Initializer):
     Initializes synaptic weights by drawing from an arbitrary parameterized torch.distributions object.
     """
 
-    def __init__(self,
-                 dist=dists.Normal(0, 1),
-                 **kwargs):
-
+    def __init__(self, dist=dists.Normal(0, 1), **kwargs):
         super().__init__(**kwargs)
 
         # assert validity of distribution object
         assert isinstance(
-            dist, dists.Distribution), 'Invalid distribution object. Must inherit from torch.distributions.Distribution'
+            dist, dists.Distribution
+        ), "Invalid distribution object. Must inherit from torch.distributions.Distribution"
         self.dist = dist
 
     def _get_weights(self, connection):
@@ -187,7 +193,6 @@ class DistInitializer(Initializer):
         return self.dist.sample(shape)
 
     def initialize_connection(self, connection):
-
         # Sample weights
         weights = self._get_weights(connection)
 
@@ -207,7 +212,6 @@ class KaimingNormalInitializer(Initializer):
         self.gain = gain
 
     def _get_weights(self, connection):
-
         fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(connection.op.weight)
 
         # get distribution
@@ -221,7 +225,6 @@ class KaimingNormalInitializer(Initializer):
         return weights
 
     def initialize_connection(self, connection):
-
         # Sample weights
         weights = self._get_weights(connection)
 
@@ -255,17 +258,13 @@ class FluctuationDrivenNormalInitializer(Initializer):
                                 (variance) is accounted for by feed-forward connections.
     """
 
-    def __init__(self,
-                 mu_u,
-                 xi,
-                 nu,
-                 timestep,
-                 epsilon_calc_mode='numerical',
-                 alpha=0.9,
-                 **kwargs):
-
-        super().__init__(scaling=None,  # None, as scaling is implemented in the weight sampling
-                         **kwargs)
+    def __init__(
+        self, mu_u, xi, nu, timestep, epsilon_calc_mode="numerical", alpha=0.9, **kwargs
+    ):
+        super().__init__(
+            scaling=None,  # None, as scaling is implemented in the weight sampling
+            **kwargs
+        )
 
         self.mu_u = mu_u
         self.xi = xi
@@ -293,7 +292,6 @@ class FluctuationDrivenNormalInitializer(Initializer):
         return ebar, ehat
 
     def _get_weights(self, connection, mu_w, sigma_w):
-
         shape = connection.op.weight.shape
 
         # sample weights
@@ -317,8 +315,9 @@ class FluctuationDrivenNormalInitializer(Initializer):
             ebar, ehat = self._calc_epsilon(connection.dst)
 
         mu_w = self.mu_u / (n * self.nu * ebar)
-        sigma_w = math.sqrt(1 / (n * self.nu * ehat) *
-                           ((theta - self.mu_u) / self.xi) ** 2 - mu_w ** 2)
+        sigma_w = math.sqrt(
+            1 / (n * self.nu * ehat) * ((theta - self.mu_u) / self.xi) ** 2 - mu_w**2
+        )
 
         return mu_w, sigma_w
 
@@ -356,14 +355,19 @@ class FluctuationDrivenNormalInitializer(Initializer):
             alpha = 1.0
 
         # Sum of all inputs
-        N_total = int(sum([torch.nn.init._calculate_fan_in_and_fan_out(c.op.weight)[0]
-                        for c in dst.afferents]))
+        N_total = int(
+            sum(
+                [
+                    torch.nn.init._calculate_fan_in_and_fan_out(c.op.weight)[0]
+                    for c in dst.afferents
+                ]
+            )
+        )
 
         # List with weight parameters for each connection
         params = []
 
         for c in dst.afferents:
-
             # Number of presynaptic neurons
             N, _ = torch.nn.init._calculate_fan_in_and_fan_out(c.op.weight)
 
@@ -377,8 +381,10 @@ class FluctuationDrivenNormalInitializer(Initializer):
                 scale = alpha / nb_ff
 
             # sigma_w for this connection
-            sigma_w = math.sqrt(scale / (N * self.nu * ehat) *
-                                ((theta - self.mu_u) / self.xi) ** 2 - mu_w ** 2)
+            sigma_w = math.sqrt(
+                scale / (N * self.nu * ehat) * ((theta - self.mu_u) / self.xi) ** 2
+                - mu_w**2
+            )
 
             # append to parameter list
             params.append((mu_w, sigma_w))
@@ -386,17 +392,14 @@ class FluctuationDrivenNormalInitializer(Initializer):
         return params
 
     def initialize_layer(self, layer):
-
         # Loop through each population in this layer
         for neurons in layer.neurons:
-
             # Consider all afferents to this population
             # and compute weight parameters for each connection
             weight_params = self._get_weight_parameters_dst(neurons)
 
             # Initialize each connection
             for idx, connection in enumerate(neurons.afferents):
-
                 # Read out parameters for weight distribution
                 mu_w, sigma_w = weight_params[idx]
                 # sample weights
@@ -515,22 +518,45 @@ class FluctuationDrivenExponentialInitializer(FluctuationDrivenNormalInitializer
 
             alpha = self.alpha
 
-            delta_REC = np.sqrt((alpha * N_total_exc_rec) /
-                                (N_total_exc_ff - alpha * N_total_exc_ff))
-            delta_EI = (delta_REC * ebar_inh * N_total_inh * self.nu) / (delta_REC *
-                                                                         ebar_exc * N_total_exc_ff * self.nu + ebar_exc * N_total_exc_rec * self.nu)
+            delta_REC = np.sqrt(
+                (alpha * N_total_exc_rec) / (N_total_exc_ff - alpha * N_total_exc_ff)
+            )
+            delta_EI = (delta_REC * ebar_inh * N_total_inh * self.nu) / (
+                delta_REC * ebar_exc * N_total_exc_ff * self.nu
+                + ebar_exc * N_total_exc_rec * self.nu
+            )
 
-            lambda_exc_ff = self.xi * np.sqrt(2) * np.sqrt(self.nu) * np.sqrt(delta_EI**2 * ehat_exc * N_total_exc_rec + delta_REC**2 * (
-                N_total_exc_ff * delta_EI**2 * ehat_exc + ehat_inh * N_total_inh)) / (theta * delta_EI * delta_REC)
+            lambda_exc_ff = (
+                self.xi
+                * np.sqrt(2)
+                * np.sqrt(self.nu)
+                * np.sqrt(
+                    delta_EI**2 * ehat_exc * N_total_exc_rec
+                    + delta_REC**2
+                    * (
+                        N_total_exc_ff * delta_EI**2 * ehat_exc
+                        + ehat_inh * N_total_inh
+                    )
+                )
+                / (theta * delta_EI * delta_REC)
+            )
             lambda_exc_rec = lambda_exc_ff * delta_REC
             lambda_inh = lambda_exc_ff * delta_EI
 
         # If not, scale automatically by number of synapses
         else:
-            delta_EI = (N_total_inh * ebar_inh * self.nu) / \
-                (N_total_exc * ebar_exc * self.nu)
-            lambda_exc_ff = self.xi * np.sqrt(2) * np.sqrt(delta_EI**2 * N_total_exc *
-                                                           self.nu * ehat_exc + N_total_inh * self.nu * ehat_inh) / (delta_EI * theta)
+            delta_EI = (N_total_inh * ebar_inh * self.nu) / (
+                N_total_exc * ebar_exc * self.nu
+            )
+            lambda_exc_ff = (
+                self.xi
+                * np.sqrt(2)
+                * np.sqrt(
+                    delta_EI**2 * N_total_exc * self.nu * ehat_exc
+                    + N_total_inh * self.nu * ehat_inh
+                )
+                / (delta_EI * theta)
+            )
             lambda_exc_rec = lambda_exc_ff
             lambda_inh = lambda_exc_ff * delta_EI
 
@@ -547,10 +573,8 @@ class FluctuationDrivenExponentialInitializer(FluctuationDrivenNormalInitializer
         return params
 
     def initialize_layer(self, layer):
-
         # Loop through each population in this layer
         for neurons in layer.neurons:
-
             # Consider all afferents to this population
             # and compute weight parameters for each connection
             weight_params = self._get_weight_parameters_dst(neurons)
@@ -652,23 +676,70 @@ class SpikeInitLogNormalInitializer(FluctuationDrivenNormalInitializer):
 
             alpha = self.alpha
 
-            delta_REC = 1/2 * \
-                np.log(N_total_exc_ff - alpha * N_total_exc_ff) - \
-                np.log(alpha*N_total_exc_rec)
-            delta_EI = 1/2 * np.log((ebar_exc * (np.exp(delta_REC) *
-                                    N_total_exc_rec + N_total_exc_ff)) / (N_total_inh * ebar_inh))
+            delta_REC = 1 / 2 * np.log(
+                N_total_exc_ff - alpha * N_total_exc_ff
+            ) - np.log(alpha * N_total_exc_rec)
+            delta_EI = (
+                1
+                / 2
+                * np.log(
+                    (ebar_exc * (np.exp(delta_REC) * N_total_exc_rec + N_total_exc_ff))
+                    / (N_total_inh * ebar_inh)
+                )
+            )
 
-            mu_exc_ff = 1/2 * (np.log(theta**2 / (self.xi**2 * (N_total_exc_rec*ehat_exc*self.nu*np.exp(
-                2*delta_REC) + N_total_inh * ehat_inh * self.nu * np.exp(2*delta_EI) + N_total_exc_ff*self.nu*ehat_exc))) - 2)
+            mu_exc_ff = (
+                1
+                / 2
+                * (
+                    np.log(
+                        theta**2
+                        / (
+                            self.xi**2
+                            * (
+                                N_total_exc_rec
+                                * ehat_exc
+                                * self.nu
+                                * np.exp(2 * delta_REC)
+                                + N_total_inh
+                                * ehat_inh
+                                * self.nu
+                                * np.exp(2 * delta_EI)
+                                + N_total_exc_ff * self.nu * ehat_exc
+                            )
+                        )
+                    )
+                    - 2
+                )
+            )
             mu_exc_rec = mu_exc_ff + delta_REC
             mu_inh = mu_exc_ff + delta_EI
 
         # If not, scale automatically by number of synapses
         else:
-            delta_EI = np.log((N_total_exc * self.nu * ebar_exc) /
-                              (N_total_inh * self.nu * ebar_inh))
-            mu_exc_ff = 1/2 * (np.log(theta**2 / (self.xi**2 * (N_total_exc*ehat_exc *
-                               self.nu + N_total_inh * ehat_inh * self.nu * np.exp(2*delta_EI)))) - 2)
+            delta_EI = np.log(
+                (N_total_exc * self.nu * ebar_exc) / (N_total_inh * self.nu * ebar_inh)
+            )
+            mu_exc_ff = (
+                1
+                / 2
+                * (
+                    np.log(
+                        theta**2
+                        / (
+                            self.xi**2
+                            * (
+                                N_total_exc * ehat_exc * self.nu
+                                + N_total_inh
+                                * ehat_inh
+                                * self.nu
+                                * np.exp(2 * delta_EI)
+                            )
+                        )
+                    )
+                    - 2
+                )
+            )
             mu_exc_rec = mu_exc_ff
             mu_inh = mu_exc_ff + delta_EI
 
@@ -684,12 +755,9 @@ class SpikeInitLogNormalInitializer(FluctuationDrivenNormalInitializer):
 
         return params
 
-
     def initialize_layer(self, layer):
-
         # Loop through each population in this layer
         for neurons in layer.neurons:
-
             # Consider all afferents to this population
             # and compute weight parameters for each connection
             weight_params = self._get_weight_parameters_dst(neurons)
