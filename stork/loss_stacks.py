@@ -323,7 +323,6 @@ class MeanSquareError(LossStack):
     def __call__(self, output, targets):
         return self.compute_loss(output, targets)
 
-
 class vRD_MeanSquareError(MeanSquareError):
 
     def __init__(self, kernel, mask=None):
@@ -334,42 +333,37 @@ class vRD_MeanSquareError(MeanSquareError):
         """
         super().__init__(mask)
         self.kernel = kernel
+        
+    def time_conv1d(self, signal):
+        # signal: [B, T_signal, N]
+        # kernel: [T_kernel]
 
-    def vanRossum(self, signal):
-        """
-        Convolve the input signal with the van Rossum kernel along the time axis.
+        # Flip the kernel for true convolution
+        kernel = self.kernel.flip(0)
 
-        Args:
-            signal (torch.Tensor): Input tensor of shape (batch, time, neuron).
-
-        Returns:
-            torch.Tensor: Convolved signal with the same shape as input.
-        """
-        # Reshape kernel for convolution
-        kernel = self.kernel.reshape(1, 1, -1)  # Shape: (1, 1, kernel_size)
-
-        # Permute signal to match convolution requirements
-        # (batch, time, neuron) -> (batch * neuron, 1, time)
-        batch, time, neuron = signal.shape
-        signal = signal.permute(0, 2, 1).reshape(-1, 1, time)
-
-        # Apply convolution (valid padding to ensure no boundary effects)
-        convolved = F.conv1d(signal, kernel, padding=0, groups=1)  # Output shape: (batch * neuron, 1, time - kernel_size + 1)
-
-        # Pad the result to match the input length (same as "full" convolution mode)
-        padding = self.kernel.size(0) - 1  # Padding needed to match original time dimension
-        convolved = F.pad(convolved, (padding, 0), mode='constant', value=0)
-
-        # Reshape back to original dimensions
-        convolved = convolved.view(batch, neuron, -1).permute(0, 2, 1)  # (batch, neuron, time) -> (batch, time, neuron)
-
-        return convolved
+        # Transpose signal to match conv1d expected input format [B, N, T_signal]
+        signal = signal.transpose(1, 2)
+        
+        # Reshape kernel for convolution: [1, 1, T_kernel]
+        kernel = kernel.view(1, 1, -1)
+        
+        # Explicit padding to keep output the same size
+        pad = kernel.shape[-1] - 1
+        
+        # Perform convolution along time dimension
+        result = F.conv1d(signal, kernel, padding=pad)
+        
+        # Trim extra padding if needed
+        result = result[:, :, :signal.shape[-1]]
+        
+        # Transpose result back to [B, T_signal, N]
+        return result.transpose(1, 2)
 
     def compute_loss(self, output, target):
         """Computes MSQE loss between output and target."""
 
-        c_output = self.vanRossum(output)
-        c_target = self.vanRossum(target)
+        c_output = self.time_conv1d(output)
+        c_target = self.time_conv1d(target)
 
         if self.mask is None:
             loss_value = self.msqe_loss(c_output, c_target)
@@ -379,21 +373,6 @@ class vRD_MeanSquareError(MeanSquareError):
                 c_target * self.mask.expand_as(c_output),
             )
         self.metrics = []
-        # plt.plot(c_output.squeeze().detach().cpu().numpy())
-        # plt.plot(c_target.squeeze().detach().cpu().numpy())
-        # plt.plot(
-        #     c_output.squeeze().detach().cpu().numpy()
-        #     - c_target.squeeze().detach().cpu().numpy()
-        # )
-        # plt.plot(
-        #     (
-        #         c_output.squeeze().detach().cpu().numpy()
-        #         - c_target.squeeze().detach().cpu().numpy()
-        #     )
-        #     ** 2
-        # )
-        # plt.ylim(-0.2, 0.3)
-        plt.show()
         return loss_value
 
 
