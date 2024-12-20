@@ -716,10 +716,10 @@ class SpikingDataset(torch.utils.data.Dataset):
         sigma_u=0.0,
         sigma_u_uniform=0.0,
         time_scale=1,
-        data_augmentation=True, 
+        data_augmentation=True,
         # Before, data_augmentation was hardcoded to True in the __init__ method,
         # thus this defaults to True if not specified.
-        # Note that with the default sigma_t=0.0, sigma_u=0.0, 
+        # Note that with the default sigma_t=0.0, sigma_u=0.0,
         # sigma_u_uniform=0.0, p_drop=0.0, p_insert=0.0,
         # the data_augmentation parameter has no effect.
     ):
@@ -859,6 +859,8 @@ class PoissonDataset(SpikingDataset):
         return X, y
 
 
+
+
 class RasDataset(SpikingDataset):
     def __init__(
         self,
@@ -869,8 +871,8 @@ class RasDataset(SpikingDataset):
         p_insert=0.0,
         sigma_t=0.0,
         time_scale=1,
-        data_augmentation=False,
-        dtype=torch.long,
+        dtype_label=torch.long,
+        dtype_data=torch.float,
     ):
         """
         This converter provides an interface for standard Ras datasets to dense tensor format.
@@ -889,7 +891,6 @@ class RasDataset(SpikingDataset):
             p_insert=p_insert,
             sigma_t=sigma_t,
             time_scale=time_scale,
-            data_augmentation=data_augmentation
         )
 
         data, labels = dataset
@@ -905,9 +906,10 @@ class RasDataset(SpikingDataset):
 
         self.data = Xscaled
         self.labels = labels
-        self.dtype = dtype
         if type(self.labels) == torch.tensor:
-            self.labels = torch.cast(labels, dtype=dtype)
+            self.labels = torch.cast(labels, dtype=dtype_label)
+        self.dtype_label = dtype_label
+        self.dtype_data = dtype_data
 
     def __len__(self):
         "Returns the total number of samples in dataset"
@@ -921,11 +923,12 @@ class RasDataset(SpikingDataset):
 
         times = times.long()
 
-        X = torch.zeros((self.nb_steps, self.nb_units), dtype=self.dtype)
+        X = torch.zeros((self.nb_steps, self.nb_units), dtype=self.dtype_data)
         X[times, units] = 1.0
         y = self.labels[index]
 
         return X, y
+
 
 
 class RasRasDataset(SpikingDataset):

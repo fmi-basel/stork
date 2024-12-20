@@ -6,7 +6,7 @@ from stork import activations
 from stork.nodes.base import CellGroup
 
 
-class SGQuantization(torch.autograd.Function):
+class SGQuantization_spike(torch.autograd.Function):
     """
     Autograd for surrogate gradients of quantized delays
     """
@@ -99,7 +99,7 @@ class DelayGroup(CellGroup):
         self.src = src
         self.max_delay_timesteps = max_delay_timesteps
 
-        self.delay_nl = SGQuantization.apply
+        self.delay_nl = SGQuantization_spike.apply
 
         # precompute indices
         self.neuron_indices = torch.arange(src.shape[-1])
@@ -135,7 +135,7 @@ class DelayGroup(CellGroup):
 
     def forward(self):
 
-        # update bufer for current time step from the output of the source group
+        # update buffer for current time step from the output of the source group
         self.buffer[self.clk % self.max_delay_timesteps] = self.src.out
         # Init output tensor with zeros
         out = torch.zeros(self.int_shape, device=self.device, dtype=self.dtype)
