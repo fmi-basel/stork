@@ -1,8 +1,9 @@
 import torch
 
 
-class WeightConstraint():
-    """ Abstract base class for weight constraints. """
+class WeightConstraint:
+    """Abstract base class for weight constraints."""
+
     def __init__(self):
         pass
 
@@ -12,7 +13,7 @@ class WeightConstraint():
 
 class MinMaxConstraint(WeightConstraint):
     def __init__(self, min=None, max=None):
-        """ Implements a min max constraint for connection weights.
+        """Implements a min max constraint for connection weights.
 
         Args:
             connection: The connection object to apply the constraint to
@@ -26,4 +27,3 @@ class MinMaxConstraint(WeightConstraint):
     def apply(self, weight):
         with torch.no_grad():
             torch.clamp_(weight, min=self.min, max=self.max)
-

@@ -11,8 +11,15 @@ from . import monitors
 
 
 class RecurrentSpikingModel(nn.Module):
-    def __init__(self, batch_size, nb_time_steps, nb_inputs, device=torch.device("cpu"), dtype=torch.float,
-                 sparse_input=False):
+    def __init__(
+        self,
+        batch_size,
+        nb_time_steps,
+        nb_inputs,
+        device=torch.device("cpu"),
+        dtype=torch.float,
+        sparse_input=False,
+    ):
         super(RecurrentSpikingModel, self).__init__()
         self.batch_size = batch_size
         self.nb_time_steps = nb_time_steps
@@ -34,8 +41,19 @@ class RecurrentSpikingModel(nn.Module):
         self.output_group = None
         self.sparse_input = sparse_input
 
-    def configure(self, input, output, loss_stack=None, optimizer=None, optimizer_kwargs=None, generator=None,
-                  time_step=1e-3, wandb=None):
+    def configure(
+        self,
+        input,
+        output,
+        loss_stack=None,
+        optimizer=None,
+        optimizer_kwargs=None,
+        scheduler=None,
+        scheduler_kwargs=None,
+        generator=None,
+        time_step=1e-3,
+        wandb=None,
+    ):
         self.input_group = input
         self.output_group = output
         self.time_step = time_step
@@ -52,12 +70,23 @@ class RecurrentSpikingModel(nn.Module):
             self.data_generator_ = generator
 
         # configure data generator
-        self.data_generator_.configure(self.batch_size, self.nb_time_steps,
-                                       self.nb_inputs, self.time_step, device=self.device, dtype=self.dtype)
+        self.data_generator_.configure(
+            self.batch_size,
+            self.nb_time_steps,
+            self.nb_inputs,
+            self.time_step,
+            device=self.device,
+            dtype=self.dtype,
+        )
 
         for o in self.groups + self.connections:
-            o.configure(self.batch_size, self.nb_time_steps,
-                        self.time_step, self.device, self.dtype)
+            o.configure(
+                self.batch_size,
+                self.nb_time_steps,
+                self.time_step,
+                self.device,
+                self.dtype,
+            )
 
         if optimizer is None:
             optimizer = torch.optim.Adam
@@ -68,41 +97,89 @@ class RecurrentSpikingModel(nn.Module):
         self.optimizer_class = optimizer
         self.optimizer_kwargs = optimizer_kwargs
         self.configure_optimizer(self.optimizer_class, self.optimizer_kwargs)
+        
+        self.scheduler_class = scheduler
+        self.scheduler_kwargs = scheduler_kwargs
+        self.configure_scheduler(self.scheduler_class, self.scheduler_kwargs)
+        
         self.to(self.device)
+        
+        
+    def set_nb_steps(self, nb_time_steps):
+        self.nb_time_steps = nb_time_steps
+        
+        # configure data generator
+        self.data_generator_.configure(
+            self.batch_size,
+            self.nb_time_steps,
+            self.nb_inputs,
+            self.time_step,
+            device=self.device,
+            dtype=self.dtype,
+        )
+        
+        for g in self.groups:
+            g.set_nb_steps(nb_time_steps)
+            
+        self.reset_states()
+
 
     def time_rescale(self, time_step=1e-3, batch_size=None):
-        """ Saves the model then re-configures it with the old hyper parameters, but the new timestep. 
-        Then loads the model again. """
+        """Saves the model then re-configures it with the old hyper parameters, but the new timestep.
+        Then loads the model again."""
         if batch_size is not None:
             self.batch_size = batch_size
         saved_state = self.state_dict()
         saved_optimizer = self.optimizer_instance
-        self.nb_time_steps = int(self.nb_time_steps*self.time_step/time_step)
-        self.configure(self.input_group, self.output_group, loss_stack=self.loss_stack, generator=self.data_generator_,
-                       time_step=time_step,
-                       optimizer=self.optimizer_class,
-                       optimizer_kwargs=self.optimizer_kwargs,
-                       wandb=self.wandb,
-                       )
+        saved_scheduler = self.scheduler_instance
+
+        self.nb_time_steps = int(self.nb_time_steps * self.time_step / time_step)
+        self.configure(
+            self.input_group,
+            self.output_group,
+            loss_stack=self.loss_stack,
+            generator=self.data_generator_,
+            time_step=time_step,
+            optimizer=self.optimizer_class,
+            optimizer_kwargs=self.optimizer_kwargs,
+            scheduler=self.scheduler_class,
+            scheduler_kwargs=self.scheduler_kwargs,
+            wandb=self.wandb,
+        )
         # Commenting this out will re-init the optimizer
         self.optimizer_instance = saved_optimizer
+        self.scheduler_instance = saved_scheduler
         self.load_state_dict(saved_state)
 
     def configure_optimizer(self, optimizer_class, optimizer_kwargs):
         if optimizer_kwargs is not None:
             self.optimizer_instance = optimizer_class(
-                self.parameters(), **optimizer_kwargs)
+                self.parameters(), **optimizer_kwargs
+            )
         else:
             self.optimizer_instance = optimizer_class(self.parameters())
 
-    def reconfigure(self):
-        """ Runs configure and replaces arguments with default from last run.
+    def configure_scheduler(self, scheduler_class, scheduler_kwargs):
+        if scheduler_class is None:
+            self.scheduler_instance = None
+        else:
+            if scheduler_kwargs is not None:
+                self.scheduler_instance = scheduler_class(
+                    self.optimizer_instance, **scheduler_kwargs
+                )
+            else:
+                self.scheduler_instance = scheduler_class(self.optimizer_instance)
 
-            This should reset the model an reinitialize all trainable variables.
+
+    def reconfigure(self):
+        """Runs configure and replaces arguments with default from last run.
+
+        This should reset the model an reinitialize all trainable variables.
         """
         if self.input_group is None or self.output_group is None:
             print(
-                "Warning! No input or output group has been assigned yet. Run configure first.")
+                "Warning! No input or output group has been assigned yet. Run configure first."
+            )
             return
 
         for o in self.groups + self.connections:
@@ -220,7 +297,8 @@ class RecurrentSpikingModel(nn.Module):
             total_loss = self.get_total_loss(output, local_y)
             # store loss and other metrics
             metrics.append(
-                [self.out_loss.item(), self.reg_loss.item()] + self.loss_stack.metrics)
+                [self.out_loss.item(), self.reg_loss.item()] + self.loss_stack.metrics
+            )
 
         return np.mean(np.array(metrics), axis=0)
 
@@ -237,13 +315,17 @@ class RecurrentSpikingModel(nn.Module):
 
             # store loss and other metrics
             metrics.append(
-                [self.out_loss.item(), self.reg_loss.item()] + self.loss_stack.metrics)
+                [self.out_loss.item(), self.reg_loss.item()] + self.loss_stack.metrics
+            )
 
             # Use autograd to compute the backward pass.
             self.optimizer_instance.zero_grad()
             loss.backward()
             self.optimizer_instance.step()
             self.apply_constraints()
+
+        if self.scheduler_instance is not None:
+            self.scheduler_instance.step()
 
         return np.mean(np.array(metrics), axis=0)
 
@@ -257,7 +339,8 @@ class RecurrentSpikingModel(nn.Module):
 
             # store loss and other metrics
             metrics.append(
-                [self.out_loss.item(), self.reg_loss.item()] + self.loss_stack.metrics)
+                [self.out_loss.item(), self.reg_loss.item()] + self.loss_stack.metrics
+            )
 
             # Use autograd to compute the backward pass.
             self.optimizer_instance.zero_grad()
@@ -265,12 +348,14 @@ class RecurrentSpikingModel(nn.Module):
 
             self.optimizer_instance.step()
             self.apply_constraints()
+            
+        if self.scheduler_instance is not None:
+            self.scheduler_instance.step()
 
         return np.mean(np.array(metrics), axis=0)
 
     def get_metric_names(self, prefix="", postfix=""):
-        metric_names = ["loss", "reg_loss"] + \
-            self.loss_stack.get_metric_names()
+        metric_names = ["loss", "reg_loss"] + self.loss_stack.get_metric_names()
         return ["%s%s%s" % (prefix, k, postfix) for k in metric_names]
 
     def get_metrics_string(self, metrics_array, prefix="", postfix=""):
@@ -280,8 +365,15 @@ class RecurrentSpikingModel(nn.Module):
             s = s + " %s=%.3g" % (name, val)
         return s
 
+    def get_metrics_dict(self, metrics_array, prefix="", postfix=""):
+        s = {}
+        names = self.get_metric_names(prefix, postfix)
+        for val, name in zip(metrics_array, names):
+            s[name] = val
+        return s
+
     def get_metrics_history_dict(self, metrics_array, prefix="", postfix=""):
-        " Create metrics history dict. """
+        " Create metrics history dict. " ""
         s = ""
         names = self.get_metric_names(prefix, postfix)
         history = {name: metrics_array[:, k] for k, name in enumerate(names)}
@@ -295,13 +387,15 @@ class RecurrentSpikingModel(nn.Module):
             self.hist.append(ret)
 
             if self.wandb is not None:
-                self.wandb.log({key: value for (key, value)
-                               in zip(self.get_metric_names(), ret)})
+                self.wandb.log(
+                    {key: value for (key, value) in zip(self.get_metric_names(), ret)}
+                )
 
             if verbose:
-                t_iter = (time.time() - t_start)
-                print("%02i %s t_iter=%.2f" %
-                      (ep, self.get_metrics_string(ret), t_iter))
+                t_iter = time.time() - t_start
+                print(
+                    "%02i %s t_iter=%.2f" % (ep, self.get_metrics_string(ret), t_iter)
+                )
 
         self.fit_runs.append(self.hist)
         history = self.get_metrics_history_dict(np.array(self.hist))
@@ -317,20 +411,24 @@ class RecurrentSpikingModel(nn.Module):
             self.hist.append(ret)
 
             if self.wandb is not None:
-                self.wandb.log({key: value for (key, value)
-                               in zip(self.get_metric_names(), ret)})
+                self.wandb.log(
+                    {key: value for (key, value) in zip(self.get_metric_names(), ret)}
+                )
 
             if verbose:
-                t_iter = (time.time() - t_start)
+                t_iter = time.time() - t_start
                 self.wall_clock_time.append(t_iter)
-                print("%02i %s t_iter=%.2f" %
-                      (ep, self.get_metrics_string(ret), t_iter))
+                print(
+                    "%02i %s t_iter=%.2f" % (ep, self.get_metrics_string(ret), t_iter)
+                )
 
         self.fit_runs.append(self.hist)
         history = self.get_metrics_history_dict(np.array(self.hist))
         return history
 
-    def fit_validate(self, dataset, valid_dataset, nb_epochs=10, verbose=True, wandb=None):
+    def fit_validate(
+        self, dataset, valid_dataset, nb_epochs=10, verbose=True, wandb=None
+    ):
         self.hist_train = []
         self.hist_valid = []
         self.wall_clock_time = []
@@ -345,22 +443,36 @@ class RecurrentSpikingModel(nn.Module):
             self.hist_valid.append(ret_valid)
 
             if self.wandb is not None:
-                self.wandb.log({key: value for (key, value) in zip(self.get_metric_names(
-                ) + self.get_metric_names(prefix="val_"), ret_train.tolist() + ret_valid.tolist())})
+                self.wandb.log(
+                    {
+                        key: value
+                        for (key, value) in zip(
+                            self.get_metric_names()
+                            + self.get_metric_names(prefix="val_"),
+                            ret_train.tolist() + ret_valid.tolist(),
+                        )
+                    }
+                )
 
             if verbose:
-                t_iter = (time.time() - t_start)
+                t_iter = time.time() - t_start
                 self.wall_clock_time.append(t_iter)
-                print("%02i %s --%s t_iter=%.2f" % (
-                    ep, self.get_metrics_string(ret_train), self.get_metrics_string(ret_valid, prefix="val_"), t_iter))
+                print(
+                    "%02i %s --%s t_iter=%.2f"
+                    % (
+                        ep,
+                        self.get_metrics_string(ret_train),
+                        self.get_metrics_string(ret_valid, prefix="val_"),
+                        t_iter,
+                    )
+                )
 
         self.hist = np.concatenate(
-            (np.array(self.hist_train), np.array(self.hist_valid)))
+            (np.array(self.hist_train), np.array(self.hist_valid))
+        )
         self.fit_runs.append(self.hist)
-        dict1 = self.get_metrics_history_dict(
-            np.array(self.hist_train), prefix="")
-        dict2 = self.get_metrics_history_dict(
-            np.array(self.hist_valid), prefix="val_")
+        dict1 = self.get_metrics_history_dict(np.array(self.hist_train), prefix="")
+        dict2 = self.get_metrics_history_dict(np.array(self.hist_valid), prefix="val_")
         history = {**dict1, **dict2}
         return history
 
@@ -397,8 +509,7 @@ class RecurrentSpikingModel(nn.Module):
             pred = []
             for local_X, _ in self.data_generator(data, shuffle=False):
                 data_local = local_X.to(self.device)
-                output = self.forward_pass(
-                    data_local, cur_batch_size=len(local_X))
+                output = self.forward_pass(data_local, cur_batch_size=len(local_X))
                 pred.append(self.loss_stack.predict(output).detach().cpu())
             return torch.cat(pred, dim=0)
 
@@ -412,7 +523,8 @@ class RecurrentSpikingModel(nn.Module):
                 m.reset()
 
             output = self.forward_pass(
-                local_X, record=True, cur_batch_size=len(local_X))
+                local_X, record=True, cur_batch_size=len(local_X)
+            )
 
             for k, mon in enumerate(self.monitors):
                 results[k].append(mon.get_data())
@@ -428,12 +540,12 @@ class RecurrentSpikingModel(nn.Module):
 
         # if there is a gradient monitor
         if any([isinstance(m, monitors.GradientMonitor) for m in self.monitors]):
-
             self.prepare_data(dataset)
 
             # Set monitors to record gradients
-            gradient_monitors = [m for m in self.monitors if isinstance(
-                m, monitors.GradientMonitor)]
+            gradient_monitors = [
+                m for m in self.monitors if isinstance(m, monitors.GradientMonitor)
+            ]
             for gm in gradient_monitors:
                 gm.set_hook()
 
@@ -445,7 +557,8 @@ class RecurrentSpikingModel(nn.Module):
 
                 # forward pass
                 output = self.forward_pass(
-                    local_X, record=True, cur_batch_size=len(local_X))
+                    local_X, record=True, cur_batch_size=len(local_X)
+                )
 
                 # compute loss
                 total_loss = self.get_total_loss(output, local_y)
@@ -479,19 +592,21 @@ class RecurrentSpikingModel(nn.Module):
             res.append(group.get_out_sequence())
         return torch.cat(res, dim=0)
 
-    def evaluate_ensemble(self, dataset, test_dataset, nb_repeats=5, nb_epochs=10, callbacks=None):
-        """ Fits the model nb_repeats times to the data and returns evaluation results.
+    def evaluate_ensemble(
+        self, dataset, test_dataset, nb_repeats=5, nb_epochs=10, callbacks=None
+    ):
+        """Fits the model nb_repeats times to the data and returns evaluation results.
 
         Args:
             dataset: Training dataset
             test_dataset: Testing data
             nb_repeats: Number of repeats to retrain the model (default=5)
             nb_epochs: Train for x epochs (default=20)
-            callbacks: A list with callbacks (functions which will be called as f(self) whose return value 
+            callbacks: A list with callbacks (functions which will be called as f(self) whose return value
                        is stored in a list and returned as third return value
 
         Returns:
-            List of learning training histories curves 
+            List of learning training histories curves
             and a list of test scores and if callbacks is not None an additional
             list with the callback results
         """
@@ -506,8 +621,7 @@ class RecurrentSpikingModel(nn.Module):
             results.append(np.array(self.hist))
             test_scores.append(score)
             if callbacks is not None:
-                callback_returns.append([callback(self)
-                                        for callback in callbacks])
+                callback_returns.append([callback(self) for callback in callbacks])
 
         if callbacks is not None:
             return results, test_scores, callback_returns
@@ -515,7 +629,7 @@ class RecurrentSpikingModel(nn.Module):
             return results, test_scores
 
     def summary(self):
-        """ Print model summary """
+        """Print model summary"""
 
         print("\n# Model summary")
         print("\n## Groups")
@@ -528,3 +642,34 @@ class RecurrentSpikingModel(nn.Module):
         print("\n## Connections")
         for con in self.connections:
             print(con)
+
+    
+    def set_dtype(self, dtype):
+        self.dtype = dtype
+        
+        for g in self.groups:
+            g.set_dtype(dtype)
+        for c in self.connections:
+            c.set_dtype(dtype)
+            
+        self.to(self.device)
+        return self
+    
+
+    def half(self):
+        """ 
+        Convert model to half precision. 
+        Because stork does not treat group states as parameters,
+        we have to convert the model to half precision manually.
+        """
+        
+        # Convert group states to half precision
+        for group in self.groups:
+            group.half()
+
+        # This will convert parameters to half precision
+        super().half()
+        
+        self.set_dtype(torch.float16)
+         
+        return self
