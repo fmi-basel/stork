@@ -786,7 +786,7 @@ class RasDataset(SpikingDataset):
         sigma_t=0.0,
         time_scale=1,
         data_augmentation=False,
-        dtype=torch.long,
+        dtype=torch.float32,
     ):
         """
         This converter provides an interface for standard Ras datasets to dense tensor format.
