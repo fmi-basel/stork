@@ -14,6 +14,3 @@ from . import layers
 from . import initializers
 
 __version__ = "0.1.0"
-
-print("using spikeinit stork")
-
